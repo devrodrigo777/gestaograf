@@ -1,0 +1,135 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 20% 98%;
+    --foreground: 215 25% 27%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 25% 27%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 25% 27%;
+
+    --primary: 168 76% 42%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 20% 96%;
+    --secondary-foreground: 215 25% 27%;
+
+    --muted: 210 20% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 210 20% 96%;
+    --accent-foreground: 215 25% 27%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 168 76% 42%;
+
+    --radius: 0.5rem;
+
+    /* Custom ERP colors */
+    --sidebar-bg: 210 29% 24%;
+    --sidebar-header: 187 71% 43%;
+    --sidebar-text: 210 20% 80%;
+    --sidebar-text-hover: 0 0% 100%;
+    --sidebar-active: 168 76% 42%;
+
+    --badge-success: 168 76% 42%;
+    --badge-warning: 36 100% 50%;
+    --badge-info: 199 89% 48%;
+    --badge-danger: 0 84% 60%;
+
+    --chart-1: 168 76% 42%;
+    --chart-2: 199 89% 48%;
+    --chart-3: 36 100% 50%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 0 84% 60%;
+  }
+
+  .dark {
+    --background: 215 25% 15%;
+    --foreground: 210 20% 98%;
+
+    --card: 215 25% 20%;
+    --card-foreground: 210 20% 98%;
+
+    --popover: 215 25% 20%;
+    --popover-foreground: 210 20% 98%;
+
+    --primary: 168 76% 42%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 215 25% 25%;
+    --secondary-foreground: 210 20% 98%;
+
+    --muted: 215 25% 25%;
+    --muted-foreground: 215 16% 65%;
+
+    --accent: 215 25% 25%;
+    --accent-foreground: 210 20% 98%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 210 20% 98%;
+
+    --border: 215 25% 25%;
+    --input: 215 25% 25%;
+    --ring: 168 76% 42%;
+
+    --sidebar-bg: 215 30% 12%;
+    --sidebar-header: 187 71% 43%;
+    --sidebar-text: 210 20% 70%;
+    --sidebar-text-hover: 0 0% 100%;
+    --sidebar-active: 168 76% 42%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+@layer components {
+  .sidebar-link {
+    @apply flex items-center gap-3 px-4 py-3 text-sidebar-text hover:text-sidebar-text-hover hover:bg-white/5 transition-colors rounded-lg mx-2;
+  }
+
+  .sidebar-link.active {
+    @apply bg-primary text-white;
+  }
+
+  .stat-card {
+    @apply bg-card rounded-lg p-5 shadow-sm border border-border;
+  }
+
+  .badge-success {
+    @apply bg-badge-success text-white px-3 py-1 rounded-md text-xs font-medium;
+  }
+
+  .badge-warning {
+    @apply bg-badge-warning text-white px-3 py-1 rounded-md text-xs font-medium;
+  }
+
+  .badge-info {
+    @apply bg-badge-info text-white px-3 py-1 rounded-md text-xs font-medium;
+  }
+
+  .badge-danger {
+    @apply bg-badge-danger text-white px-3 py-1 rounded-md text-xs font-medium;
+  }
+
+  .chart-header {
+    @apply bg-primary text-white px-4 py-3 rounded-t-lg font-medium flex items-center gap-2;
+  }
+}
