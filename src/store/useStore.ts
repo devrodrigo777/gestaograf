@@ -1,46 +1,61 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Product, Service, Client, Quote, Sale, User, Company } from '@/types';
+import { supabase } from '@/lib/supabaseClient';
 
+/**
+ * Interface Store
+ * 
+ * Define todos os estados e funções disponíveis no Zustand store.
+ * O store gerencia:
+ * - Autenticação (usuário local e Supabase)
+ * - Produtos, Serviços, Clientes
+ * - Orçamentos e Vendas
+ * - Atividades descartadas
+ */
 interface Store {
-  // Auth
-  user: User | null;
-  company: Company | null;
-  users: User[];
-  companies: Company[];
+  // ==================== AUTENTICAÇÃO ====================
+  user: User | null; // Usuário local autenticado
+  company: Company | null; // Empresa selecionada
+  supabaseUser: any | null; // Usuário autenticado via Supabase/Google
+  users: User[]; // Lista de usuários locais (dados de teste)
+  companies: Company[]; // Lista de empresas locais (dados de teste)
   
+  // ==================== DADOS ====================
   products: Product[];
   services: Service[];
   clients: Client[];
   quotes: Quote[];
   sales: Sale[];
-  dismissedActivityIds: string[];
+  dismissedActivityIds: string[]; // IDs de atividades descartadas
   
-  // Auth Methods
+  // ==================== MÉTODOS DE AUTENTICAÇÃO ====================
   login: (username: string, password: string, companyName: string) => boolean;
-  logout: () => void;
+  logout: () => Promise<void>;
+  // Sincronizar usuário Supabase com o store
+  setSupabaseUser: (user: any) => void;
   registerUser: (user: User) => void;
   updateUser: (user: Partial<User>) => void;
   
-  // Products
+  // ==================== MÉTODOS DE PRODUTOS ====================
   addProduct: (product: Product) => void;
   updateProduct: (id: string, product: Partial<Product>) => void;
   deleteProduct: (id: string) => void;
   getProducts: () => Product[];
   
-  // Services
+  // ==================== MÉTODOS DE SERVIÇOS ====================
   addService: (service: Service) => void;
   updateService: (id: string, service: Partial<Service>) => void;
   deleteService: (id: string) => void;
   getServices: () => Service[];
   
-  // Clients
+  // ==================== MÉTODOS DE CLIENTES ====================
   addClient: (client: Client) => void;
   updateClient: (id: string, client: Partial<Client>) => void;
   deleteClient: (id: string) => void;
   getClients: () => Client[];
   
-  // Quotes
+  // ==================== MÉTODOS DE ORÇAMENTOS ====================
   addQuote: (quote: Quote) => void;
   updateQuote: (id: string, quote: Partial<Quote>) => void;
   deleteQuote: (id: string) => void;
@@ -48,23 +63,33 @@ interface Store {
   removePaymentFromQuote: (quoteId: string, paymentId: string) => void;
   convertQuoteToSale: (quoteId: string, paymentMethod: Sale['paymentMethod']) => void;
   getQuotes: () => Quote[];
-  // Activities dismissal
-  dismissActivity: (id: string) => void;
-  restoreActivity: (id: string) => void;
   
-  // Sales
+  // ==================== MÉTODOS DE ATIVIDADES ====================
+  dismissActivity: (id: string) => void; // Descartar atividade
+  restoreActivity: (id: string) => void; // Restaurar atividade
+  
+  // ==================== MÉTODOS DE VENDAS ====================
   addSale: (sale: Sale) => void;
   updateSale: (id: string, sale: Partial<Sale>) => void;
   deleteSale: (id: string) => void;
   getSales: () => Sale[];
 }
 
+/**
+ * Zustand Store
+ * 
+ * Gerenciamento de estado global com persistência local.
+ * Usa localStorage para salvar dados entre sessões.
+ */
 export const useStore = create<Store>()(
   persist(
     (set, get) => ({
-      // Auth initial state
+      // ==================== ESTADO INICIAL DE AUTENTICAÇÃO ====================
       user: null,
       company: null,
+      supabaseUser: null,
+      
+      // Dados de teste locais (usados se Supabase não estiver disponível)
       users: [
         {
           id: '1',
@@ -83,6 +108,7 @@ export const useStore = create<Store>()(
         }
       ],
 
+      // Estados iniciais para dados vazios
       products: [],
       services: [],
       clients: [],
@@ -90,7 +116,12 @@ export const useStore = create<Store>()(
       sales: [],
       dismissedActivityIds: [],
 
-      // Auth Methods
+      // ==================== MÉTODOS DE AUTENTICAÇÃO ====================
+      
+      /**
+       * Login com credenciais locais (legado)
+       * Nota: Atualmente não usado, mantido para compatibilidade
+       */
       login: (username, password, companyName) => {
         const company = get().companies.find(c => c.name === companyName);
         if (!company) return false;
@@ -105,14 +136,65 @@ export const useStore = create<Store>()(
         return true;
       },
 
-      logout: () => set({ user: null, company: null }),
+      /**
+       * Logout - Limpar todos os dados de autenticação
+       */
+      logout: async () => {
+        try {
+          // 1. Encerra a sessão no servidor do Supabase
+          await supabase.auth.signOut();
+        } catch (error) {
+          console.error("Erro ao sair do Supabase:", error);
+        } finally {
+          // 2. Limpa os estados locais (mesmo se o signOut der erro)
+          set({ 
+            user: null, 
+            company: null, 
+            supabaseUser: null 
+          });
 
+          // 3. Opcional: Redireciona para o login ou recarrega a página para limpar o cache
+          window.location.href = '/login';
+        }
+      },
+
+      /**
+       * Sincronizar usuário Supabase com o store
+       * Converte dados do Supabase para o formato local da aplicação
+       */
+      setSupabaseUser: (supabaseUser) => {
+        // Extrair informações do usuário Supabase
+        const email = supabaseUser.email || '';
+        const displayName = supabaseUser.user_metadata?.full_name || 
+                           supabaseUser.user_metadata?.name || 
+                           email.split('@')[0]; // Usar parte do email como fallback
+        
+        // Criar usuário local baseado no Supabase
+        const user: User = {
+          id: supabaseUser.id, // Use ID do Supabase
+          username: displayName,
+          email: email,
+          password: '', // Não usado com Supabase (autenticação é via OAuth)
+          companyId: '1', // Usar companyId padrão
+          createdAt: new Date().toISOString(),
+        };
+
+        // Atualizar store com novo usuário
+        set({ supabaseUser, user, company: get().companies[0] || null });
+      },
+
+      /**
+       * Registrar novo usuário local (legado)
+       */
       registerUser: (user) => {
         set((state) => ({
           users: [...state.users, user]
         }));
       },
 
+      /**
+       * Atualizar dados do usuário autenticado
+       */
       updateUser: (user) => set((state) => {
         if (!state.user) return state;
         const updatedUser = { ...state.user, ...user };

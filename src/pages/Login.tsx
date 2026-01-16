@@ -1,42 +1,92 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '@/store/useStore';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 
+// Importar cliente Supabase para autenticação OAuth com Google
+import { supabase } from '@/lib/supabaseClient';
+
+/**
+ * Componente de Login
+ * 
+ * Responsabilidades:
+ * - Exibir botão para login com Google
+ * - Sincronizar sessão do Supabase com o estado da aplicação
+ * - Redirecionar usuário autenticado para o Dashboard
+ */
 export default function Login() {
   const navigate = useNavigate();
-  const { login } = useStore();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [company, setCompany] = useState('');
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  // Acessar função para sincronizar usuário Supabase com o store
+  const { setSupabaseUser } = useStore();
+  
+  // Estados para gerenciar autenticação
+  const [user, setUser] = useState(null); // Usuário autenticado
+  const [error, setError] = useState(''); // Mensagens de erro
+  const [isLoading, setIsLoading] = useState(false); // Loading durante login
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setIsLoading(true);
+  // useEffect 1: Sincronizar sessão ao carregar a página
+  useEffect(() => {
+    // Verificar se já existe uma sessão ativa do Supabase
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        // Se há sessão, atualizar estado local e do Zustand
+        setUser(session.user);
+        setSupabaseUser(session.user);
+        console.log("Sessão recuperada via getSession");
+      }
+    };
 
-    if (!username || !password || !company) {
-      setError('Por favor preencha todos os campos');
-      setIsLoading(false);
-      return;
-    }
+    checkSession();
 
-    const success = login(username, password, company);
+    // Escutar mudanças de autenticação em tempo real
+    // Isso detecta login/logout de qualquer aba do navegador
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        // Sincronizar usuário com o store Zustand
+        setSupabaseUser(session.user);
+      }
+    });
 
-    if (success) {
+    // Limpar subscription ao desmontar o componente
+    return () => subscription?.unsubscribe();
+  }, [setSupabaseUser]);
+
+  // useEffect 2: Redirecionar para dashboard quando usuário estiver autenticado
+  // Separado do anterior para evitar navegação duplicada
+  useEffect(() => {
+    if (user) {
+      console.log("Usuário detectado, redirecionando...", user);
       navigate('/');
-    } else {
-      setError('Usuário, senha ou empresa inválidos');
     }
+  }, [user, navigate]);
 
-    setIsLoading(false);
+  /**
+   * Iniciar login com Google via Supabase OAuth
+   */
+  const handleGoogleLogin = async () => {
+    setIsLoading(true);
+    setError('');
+
+    // Chamar método de login OAuth do Supabase
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google', // Usar Google como provedor
+      options: {
+        // Redirecionar para home após autenticação bem-sucedida
+        redirectTo: window.location.origin + '/',
+      }
+    });
+
+    if (error) {
+      setError('Erro ao fazer login com Google: ' + error.message);
+      setIsLoading(false);
+      console.log("Erro do login Google: " + error);
+    }
+    // Nota: O loading permanece ativo durante redirecionamento
   };
 
   return (
@@ -48,70 +98,36 @@ export default function Login() {
             Sistema de Gestão Gráfica
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
+        <CardContent className="space-y-4">
+          {/* Mostrar erro se houver */}
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Instruções para o usuário */}
+          <div className="text-center text-gray-600 mb-4">
+            <p>Faça login com sua conta Google para continuar</p>
+          </div>
+
+          {/* Botão para login com Google */}
+          <Button
+            type="button"
+            className="w-full bg-indigo-600 hover:bg-indigo-700"
+            onClick={handleGoogleLogin}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Entrando...
+              </>
+            ) : (
+              'Entrar com Google'
             )}
-
-            <div className="space-y-2">
-              <Label htmlFor="company">Empresa</Label>
-              <Input
-                id="company"
-                type="text"
-                placeholder="Digite o nome da sua empresa"
-                value={company}
-                onChange={(e) => setCompany(e.target.value)}
-                disabled={isLoading}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="username">Usuário</Label>
-              <Input
-                id="username"
-                type="text"
-                placeholder="Digite seu usuário"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                disabled={isLoading}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password">Senha</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Digite sua senha"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={isLoading}
-              />
-            </div>
-
-            <Button
-              type="submit"
-              className="w-full bg-indigo-600 hover:bg-indigo-700"
-              disabled={isLoading}
-            >
-              {isLoading ? 'Entrando...' : 'Entrar'}
-            </Button>
-
-            <div className="pt-4 border-t">
-              <p className="text-sm text-gray-600 text-center mb-2">
-                Credenciais de teste:
-              </p>
-              <ul className="text-xs text-gray-500 space-y-1">
-                <li><strong>Empresa:</strong> admin</li>
-                <li><strong>Usuário:</strong> admin</li>
-                <li><strong>Senha:</strong> admin</li>
-              </ul>
-            </div>
-          </form>
+          </Button>
         </CardContent>
       </Card>
     </div>
