@@ -2,14 +2,16 @@ import { useStore } from '@/store/useStore';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { DashboardChart } from '@/components/dashboard/DashboardChart';
 import { MessageCircle, Calendar, ShoppingCart, DollarSign } from 'lucide-react';
-import { useMemo } from 'react';
 import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export default function Dashboard() {
-  const { clients, sales, quotes } = useStore();
+  const { getClients, getSales, getQuotes } = useStore();
+  const clients = getClients();
+  const sales = getSales();
+  const quotes = getQuotes();
 
-  const stats = useMemo(() => {
+  const stats = (() => {
     const now = new Date();
     const thisMonth = {
       start: startOfMonth(now),
@@ -29,9 +31,9 @@ export default function Dashboard() {
       sales: salesThisMonth.length,
       totalSales: totalSalesThisMonth,
     };
-  }, [clients, sales, quotes]);
+  })();
 
-  const clientsChartData = useMemo(() => {
+  const clientsChartData = (() => {
     const months = [];
     for (let i = 5; i >= 0; i--) {
       const month = subMonths(new Date(), i);
@@ -48,9 +50,9 @@ export default function Dashboard() {
       });
     }
     return months;
-  }, [clients]);
+  })();
 
-  const salesChartData = useMemo(() => {
+  const salesChartData = (() => {
     const months = [];
     for (let i = 5; i >= 0; i--) {
       const month = subMonths(new Date(), i);
@@ -60,14 +62,13 @@ export default function Dashboard() {
       const total = sales
         .filter((s) => isWithinInterval(new Date(s.createdAt), { start: monthStart, end: monthEnd }))
         .reduce((acc, s) => acc + s.total, 0);
-
       months.push({
         name: format(month, 'MMM/yy', { locale: ptBR }),
         value: total,
       });
     }
     return months;
-  }, [sales]);
+  })();
 
   return (
     <div className="p-6">

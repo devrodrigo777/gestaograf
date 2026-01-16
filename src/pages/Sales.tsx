@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useStore } from '@/store/useStore';
-import { Sale, SaleItem } from '@/types';
+import { Sale, SaleItem, ProductionStatus } from '@/types';
 import { PageHeader } from '@/components/ui/page-header';
 import { DataTable } from '@/components/ui/data-table';
 import { Button } from '@/components/ui/button';
@@ -21,11 +21,27 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { Plus, Trash2, CheckCircle } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, Eye, Send, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+const BASE_URL = window.location.origin;
+
+const productionStatusLabels: Record<ProductionStatus, string> = {
+  waiting_approval: 'Aguardando Aprovação',
+  approved: 'Aprovado',
+  in_production: 'Em Produção',
+  finishing: 'Acabamento',
+  ready: 'Pronto',
+  delivered: 'Entregue',
+};
+
 export default function Sales() {
-  const { sales, clients, products, services, addSale, updateSale, deleteSale } = useStore();
+  const { getSales, getClients, getProducts, getServices, addSale, updateSale, deleteSale, company, getQuotes } = useStore();
+  const sales = getSales();
+  const quotes = getQuotes();
+  const clients = getClients();
+  const products = getProducts();
+  const services = getServices();
   const [isOpen, setIsOpen] = useState(false);
   const [formData, setFormData] = useState({
     clientId: '',
@@ -37,6 +53,9 @@ export default function Sales() {
     itemId: '',
     quantity: '1',
   });
+  const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [productionStatus, setProductionStatus] = useState('');
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
 
   const statusLabels = {
     pending: 'Pendente',
@@ -74,17 +93,87 @@ export default function Sales() {
     },
     {
       key: 'status' as const,
+      header: 'Diferença',
+      render: (item: Sale) => {
+        if (!item.quoteId) return <div className="text-sm text-muted-foreground">-</div>;
+        
+        const quote = quotes.find(q => q.id === item.quoteId);
+        if (!quote) return <div className="text-sm text-muted-foreground">-</div>;
+        
+        const totalPaid = (quote.payments || []).reduce((acc, p) => acc + p.amount, 0);
+        const difference = totalPaid - quote.total;
+        
+        if (difference > 0) {
+          return (
+            <div className="text-sm text-blue-600 font-medium">
+              +R$ {difference.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </div>
+          );
+        }
+        return <div className="text-sm text-muted-foreground">-</div>;
+      },
+    },
+    {
+      key: 'paymentMethod' as const,
       header: 'Status',
       render: (item: Sale) => (
-        <span className={cn('text-white px-3 py-1 rounded text-xs font-medium', statusColors[item.status])}>
-          {statusLabels[item.status]}
-        </span>
+        <div className="flex flex-col gap-1">
+          <span className={cn('text-white px-3 py-1 rounded text-xs font-medium', statusColors[item.status])}>
+            {statusLabels[item.status]}
+          </span>
+          {item.productionStatus && (
+            <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded">
+              {productionStatusLabels[item.productionStatus]}
+            </span>
+          )}
+        </div>
       ),
     },
     {
       key: 'createdAt' as const,
       header: 'Data',
       render: (item: Sale) => format(new Date(item.createdAt), 'dd/MM/yyyy'),
+    },
+    {
+      key: 'actions' as const,
+      header: 'Ações',
+      render: (item: Sale) => (
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSendWhatsApp(item);
+            }}
+            title="Enviar via WhatsApp"
+          >
+            <Send className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              window.open(`/acompanhar/${item.quoteId || item.id}`, '_blank');
+            }}
+            title="Ver página de acompanhamento"
+          >
+            <Eye className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenProductionStatus(item);
+            }}
+            title="Atualizar status de produção"
+          >
+            <Settings className="w-4 h-4" />
+          </Button>
+        </div>
+      ),
     },
   ];
 
@@ -162,6 +251,7 @@ export default function Sales() {
 
     const newSale: Sale = {
       id: crypto.randomUUID(),
+      companyId: company!.id,
       clientId: formData.clientId,
       clientName: client.name,
       items: formData.items,
@@ -186,6 +276,44 @@ export default function Sales() {
       deleteSale(sale.id);
       toast.success('Venda excluída com sucesso!');
     }
+  };
+
+  const handleSendWhatsApp = (sale: Sale) => {
+    const client = clients.find(c => c.id === sale.clientId);
+    const phone = client?.phone?.replace(/\D/g, '') || '';
+    const trackingUrl = `${BASE_URL}/acompanhar/${sale.quoteId || sale.id}`;
+    
+    const message = `Olá ${sale.clientName}! 🖨️
+
+Sua venda *#${sale.id.slice(0, 8).toUpperCase()}* foi registrada!
+
+*Valor Total:* R$ ${sale.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+
+📋 *Itens:*
+${sale.items.map(item => `• ${item.name} (${item.quantity}x) - R$ ${item.total.toFixed(2)}`).join('\n')}
+
+🔗 *Acompanhe seu pedido:*
+${trackingUrl}
+
+Gráfica Express - Qualidade em impressão!`;
+
+    const whatsappUrl = `https://wa.me/55${phone}?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank');
+    toast.success('Abrindo WhatsApp...');
+  };
+
+  const handleOpenProductionStatus = (sale: Sale) => {
+    setSelectedSale(sale);
+    setProductionStatus(sale.productionStatus || 'waiting_approval');
+    setStatusDialogOpen(true);
+  };
+
+  const handleSaveProductionStatus = () => {
+    if (!selectedSale) return;
+    
+    updateSale(selectedSale.id, { productionStatus: productionStatus as ProductionStatus });
+    toast.success('Status de produção atualizado!');
+    setStatusDialogOpen(false);
   };
 
   const total = formData.items.reduce((acc, item) => acc + item.total, 0);
@@ -353,6 +481,45 @@ export default function Sales() {
               <Button type="submit">Registrar Venda</Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Atualizar Status de Produção</DialogTitle>
+          </DialogHeader>
+          {selectedSale && (
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">Venda #{selectedSale.id.slice(0, 8).toUpperCase()}</p>
+              </div>
+              <div>
+                <Label>Status de Produção</Label>
+                <Select value={productionStatus} onValueChange={(value) => setProductionStatus(value as ProductionStatus)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="waiting_approval">Aguardando Aprovação</SelectItem>
+                    <SelectItem value="approved">Aprovado</SelectItem>
+                    <SelectItem value="in_production">Em Produção</SelectItem>
+                    <SelectItem value="finishing">Acabamento</SelectItem>
+                    <SelectItem value="ready">Pronto para Retirada</SelectItem>
+                    <SelectItem value="delivered">Entregue</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex gap-2 justify-end pt-4">
+                <Button variant="outline" onClick={() => setStatusDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleSaveProductionStatus}>
+                  Salvar
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

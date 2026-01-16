@@ -1,12 +1,11 @@
 import { useState } from 'react';
 import { useStore } from '@/store/useStore';
-import { Quote, QuoteItem, ProductionStatus } from '@/types';
+import { Quote, ProductionStatus } from '@/types';
 import { PageHeader } from '@/components/ui/page-header';
 import { DataTable } from '@/components/ui/data-table';
 import { Button } from '@/components/ui/button';
+import { Label } from "@/components/ui/label";
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -20,9 +19,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { QuoteForm } from '@/components/dashboard/QuoteForm';
 import { toast } from 'sonner';
 import { format, addDays } from 'date-fns';
-import { Plus, Trash2, ArrowRightLeft, Send, Eye, Settings } from 'lucide-react';
+import { ArrowRightLeft, Send, Eye, Settings, Edit, DollarSign } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const BASE_URL = 'https://graficaexpress.com.br';
@@ -37,30 +37,35 @@ const productionStatusLabels: Record<ProductionStatus, string> = {
 };
 
 export default function Quotes() {
-  const { quotes, clients, products, services, addQuote, updateQuote, deleteQuote, convertQuoteToSale } = useStore();
-  const [isOpen, setIsOpen] = useState(false);
-  const [isConvertOpen, setIsConvertOpen] = useState(false);
+  const { quotes: allQuotes, clients: allClients, company, addQuote, updateQuote, deleteQuote, convertQuoteToSale } = useStore();
+  const quotes = allQuotes.filter(q => q.companyId === company?.id && q.status !== 'converted');
+  const clients = allClients.filter(c => c.companyId === company?.id);
+
+  const paidQuotes = quotes.filter(
+    (q) => (q.status === 'fully_paid' || q.status === 'partially_paid')
+  );
+
+  const unpaidQuotes = quotes.filter(
+    (q) => q.status !== 'fully_paid' && q.status !== 'partially_paid'
+  );
+  const [isFormOpen, setIsFormOpen] = useState(false);
   const [isStatusOpen, setIsStatusOpen] = useState(false);
+  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+  
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
+  const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
+
   const [paymentMethod, setPaymentMethod] = useState<string>('pix');
+  const [paymentAmount, setPaymentAmount] = useState<string>('');
   const [newProductionStatus, setNewProductionStatus] = useState<ProductionStatus>('waiting_approval');
-  const [formData, setFormData] = useState({
-    clientId: '',
-    validDays: '30',
-    notes: '',
-    items: [] as QuoteItem[],
-  });
-  const [newItem, setNewItem] = useState({
-    type: 'product',
-    itemId: '',
-    quantity: '1',
-  });
 
   const statusLabels = {
     pending: 'Pendente',
     approved: 'Aprovado',
     rejected: 'Rejeitado',
     converted: 'Convertido',
+    partially_paid: 'Parcialmente Pago',
+    fully_paid: 'Pago',
   };
 
   const statusColors = {
@@ -68,7 +73,97 @@ export default function Quotes() {
     approved: 'bg-badge-success',
     rejected: 'bg-badge-danger',
     converted: 'bg-badge-info',
+    partially_paid: 'bg-badge-secondary',
+    fully_paid: 'bg-green-200',
   };
+
+  const statusTextColors = {
+    pending: 'text-yellow-800',
+    approved: 'text-green-800',
+    rejected: 'text-red-800',
+    converted: 'text-blue-800',
+    partially_paid: 'text-gray-800',
+    fully_paid: 'text-green-700',
+  };
+
+  const handleNew = () => {
+    setEditingQuote(null);
+    setIsFormOpen(true);
+  };
+
+  const handleEdit = (quote: Quote) => {
+    setEditingQuote(quote);
+    setIsFormOpen(true);
+  };
+
+  const handleDelete = (quote: Quote) => {
+    if (confirm('Tem certeza que deseja excluir este orçamento?')) {
+      deleteQuote(quote.id);
+      toast.success('Orçamento excluído com sucesso!');
+    }
+  };
+
+  const handleSaveQuote = (data: any) => {
+    const { clientId, items, validDays, notes, deliveryDate } = data;
+    
+    if (!clientId) {
+      toast.error('Selecione um cliente');
+      return;
+    }
+
+    if (items.length === 0) {
+      toast.error('Adicione pelo menos um item');
+      return;
+    }
+
+    const client = clients.find((c) => c.id === clientId);
+    if (!client) {
+      toast.error('Cliente não encontrado');
+      return;
+    }
+    
+    const total = items.reduce((acc: number, item: any) => acc + item.total, 0);
+    const validity = parseInt(validDays) || 30;
+
+    if (editingQuote) {
+      // Update existing quote
+      const updatedQuote: Partial<Quote> = {
+        clientId,
+        clientName: client.name,
+        clientPhone: client.phone,
+        items,
+        total,
+        validUntil: addDays(new Date(editingQuote.createdAt), validity).toISOString(),
+        notes,
+        deliveryDate,
+      };
+      updateQuote(editingQuote.id, updatedQuote);
+      toast.success('Orçamento atualizado com sucesso!');
+    } else {
+      const newQuote: Quote = {
+        id: crypto.randomUUID(),
+        companyId: company!.id,
+        clientId: clientId,
+        clientName: client.name,
+        clientPhone: client.phone,
+        items: items,
+        total,
+        payments: [],
+        status: 'pending',
+        productionStatus: 'waiting_approval',
+        validUntil: addDays(new Date(), validity).toISOString(),
+        createdAt: new Date().toISOString(),
+        notes: notes,
+        deliveryDate,
+      };
+      addQuote(newQuote);
+      toast.success('Orçamento criado com sucesso!');
+    }
+
+    setIsFormOpen(false);
+    setEditingQuote(null);
+  };
+
 
   const columns = [
     { key: 'id' as const, header: 'Nº', render: (item: Quote) => item.id.slice(0, 8).toUpperCase() },
@@ -80,10 +175,24 @@ export default function Quotes() {
         `R$ ${item.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
     },
     {
+      key: 'payments' as const,
+      header: 'Pagamentos',
+      render: (item: Quote) => {
+        const paidAmount = (item.payments || []).reduce((acc, p) => acc + p.amount, 0);
+        const remainingAmount = Math.max(0, item.total - paidAmount);
+        return (
+          <div className="text-sm">
+            <div className="text-green-600">Pago: R$ {paidAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+            <div className="text-orange-600">Faltam: R$ {remainingAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+          </div>
+        );
+      },
+    },
+    {
       key: 'status' as const,
       header: 'Status',
       render: (item: Quote) => (
-        <span className={cn('text-white px-3 py-1 rounded text-xs font-medium', statusColors[item.status])}>
+        <span className={cn(statusTextColors[item.status],'px-3 py-1 rounded text-xs font-medium', statusColors[item.status])}>
           {statusLabels[item.status]}
         </span>
       ),
@@ -103,10 +212,57 @@ export default function Quotes() {
       render: (item: Quote) => format(new Date(item.createdAt), 'dd/MM/yyyy'),
     },
     {
+      key: 'productionStatus' as const,
+      header: 'Diferença',
+      render: (item: Quote) => {
+        const paidAmount = (item.payments || []).reduce((acc, p) => acc + p.amount, 0);
+        const difference = paidAmount - item.total;
+        if (difference > 0) {
+          return (
+            <div className="text-sm text-blue-600 font-medium">
+              +R$ {difference.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </div>
+          );
+        }
+        return <div className="text-sm text-muted-foreground">-</div>;
+      },
+    },
+    {
       key: 'actions' as const,
       header: 'Ações',
       render: (item: Quote) => (
         <div className="flex gap-1">
+          {(() => {
+            const paidAmount = (item.payments || []).reduce((acc, p) => acc + p.amount, 0);
+            const isFullyPaid = paidAmount >= item.total;
+            if (isFullyPaid) {
+              return (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleConvert(item);
+                  }}
+                  title="Converter em Venda"
+                >
+                  <ArrowRightLeft className="w-4 h-4" />
+                </Button>
+              );
+            }
+            return null;
+          })()}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleEdit(item);
+            }}
+            title="Editar Orçamento"
+          >
+            <Edit className="w-4 h-4" />
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -128,6 +284,17 @@ export default function Quotes() {
             title="Ver página de acompanhamento"
           >
             <Eye className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenPaymentDialog(item);
+            }}
+            title="Registrar pagamento"
+          >
+            <DollarSign className="w-4 h-4" />
           </Button>
           <Button
             variant="outline"
@@ -182,326 +349,97 @@ Gráfica Express - Qualidade em impressão!`;
     setIsStatusOpen(false);
   };
 
-  const handleOpen = () => {
-    setFormData({ clientId: '', validDays: '30', notes: '', items: [] });
-    setNewItem({ type: 'product', itemId: '', quantity: '1' });
-    setIsOpen(true);
-  };
-
-  const handleAddItem = () => {
-    if (!newItem.itemId || !newItem.quantity) {
-      toast.error('Selecione um item e quantidade');
-      return;
-    }
-
-    const quantity = parseInt(newItem.quantity);
-    if (isNaN(quantity) || quantity <= 0) {
-      toast.error('Quantidade inválida');
-      return;
-    }
-
-    let name = '';
-    let unitPrice = 0;
-
-    if (newItem.type === 'product') {
-      const product = products.find((p) => p.id === newItem.itemId);
-      if (!product) return;
-      name = product.name;
-      unitPrice = product.price;
-    } else {
-      const service = services.find((s) => s.id === newItem.itemId);
-      if (!service) return;
-      name = service.name;
-      unitPrice = service.price;
-    }
-
-    const item: QuoteItem = {
-      id: crypto.randomUUID(),
-      productId: newItem.type === 'product' ? newItem.itemId : undefined,
-      serviceId: newItem.type === 'service' ? newItem.itemId : undefined,
-      name,
-      quantity,
-      unitPrice,
-      total: quantity * unitPrice,
-    };
-
-    setFormData({ ...formData, items: [...formData.items, item] });
-    setNewItem({ type: 'product', itemId: '', quantity: '1' });
-  };
-
-  const handleRemoveItem = (itemId: string) => {
-    setFormData({
-      ...formData,
-      items: formData.items.filter((i) => i.id !== itemId),
-    });
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!formData.clientId) {
-      toast.error('Selecione um cliente');
-      return;
-    }
-
-    if (formData.items.length === 0) {
-      toast.error('Adicione pelo menos um item');
-      return;
-    }
-
-    const client = clients.find((c) => c.id === formData.clientId);
-    if (!client) return;
-
-    const total = formData.items.reduce((acc, item) => acc + item.total, 0);
-    const validDays = parseInt(formData.validDays) || 30;
-
-    const newQuote: Quote = {
-      id: crypto.randomUUID(),
-      clientId: formData.clientId,
-      clientName: client.name,
-      clientPhone: client.phone,
-      items: formData.items,
-      total,
-      status: 'pending',
-      productionStatus: 'waiting_approval',
-      validUntil: addDays(new Date(), validDays).toISOString(),
-      createdAt: new Date().toISOString(),
-      notes: formData.notes,
-    };
-
-    addQuote(newQuote);
-    toast.success('Orçamento criado com sucesso!');
-    setIsOpen(false);
-  };
-
   const handleConvert = (quote: Quote) => {
-    setSelectedQuote(quote);
-    setPaymentMethod('pix');
-    setIsConvertOpen(true);
-  };
-
-  const handleConfirmConvert = () => {
-    if (!selectedQuote) return;
-    convertQuoteToSale(selectedQuote.id, paymentMethod as any);
-    toast.success('Orçamento convertido em venda!');
-    setIsConvertOpen(false);
-  };
-
-  const handleDelete = (quote: Quote) => {
-    if (confirm('Tem certeza que deseja excluir este orçamento?')) {
-      deleteQuote(quote.id);
-      toast.success('Orçamento excluído com sucesso!');
+    if (confirm('Tem certeza que deseja converter este orçamento em venda?')) {
+      convertQuoteToSale(quote.id, 'pix');
+      toast.success('Orçamento convertido em venda!');
     }
   };
 
-  const total = formData.items.reduce((acc, item) => acc + item.total, 0);
+  const handleOpenPaymentDialog = (quote: Quote) => {
+    setSelectedQuote(quote);
+    setPaymentAmount('');
+    setPaymentMethod('pix');
+    setIsPaymentOpen(true);
+  };
+
+  const handleAddPayment = () => {
+    if (!selectedQuote || !paymentAmount) {
+      toast.error('Preencha o valor do pagamento');
+      return;
+    }
+
+    // Converter formato brasileiro para número
+    const amount = parseFloat(paymentAmount.replace(/\./g, '').replace(/,/g, '.'));
+    
+    if (amount <= 0) {
+      toast.error('O valor do pagamento deve ser maior que zero');
+      return;
+    }
+
+    const paidAmount = (selectedQuote.payments || []).reduce((acc, p) => acc + p.amount, 0);
+    const newTotalPaid = paidAmount + amount;
+
+    const { addPaymentToQuote } = useStore.getState();
+    addPaymentToQuote(selectedQuote.id, amount, paymentMethod);
+    
+    // Atualizar status baseado no total pago
+    if (newTotalPaid >= selectedQuote.total) {
+      updateQuote(selectedQuote.id, { status: 'fully_paid' });
+    } else {
+      updateQuote(selectedQuote.id, { status: 'partially_paid' });
+    }
+    
+    toast.success('Pagamento registrado com sucesso!');
+    
+    setIsPaymentOpen(false);
+  };
+
+  const handleRemovePayment = (quoteId: string, paymentId: string) => {
+    if (confirm('Tem certeza que deseja remover este pagamento?')) {
+      const { removePaymentFromQuote } = useStore.getState();
+      removePaymentFromQuote(quoteId, paymentId);
+      toast.success('Pagamento removido com sucesso!');
+    }
+  };
 
   return (
     <div className="p-6">
       <PageHeader
         title="Orçamentos"
         description="Gerencie seus orçamentos"
-        action={{ label: 'Novo Orçamento', onClick: handleOpen }}
+        action={{ label: 'Novo Orçamento', onClick: handleNew }}
       />
 
+      {paidQuotes.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-xl font-semibold mb-4">Orçamentos Pagos e Parcialmente Pagos</h2>
+          <DataTable
+            data={paidQuotes}
+            columns={columns}
+            onDelete={handleDelete}
+          />
+        </div>
+      )}
+
+      <h2 className="text-xl font-semibold mb-4">Orçamentos Pendentes</h2>
       <DataTable
-        data={quotes}
+        data={unpaidQuotes}
         columns={columns}
-        onEdit={(quote) => quote.status === 'pending' && handleConvert(quote)}
         onDelete={handleDelete}
       />
 
-      {/* New Quote Dialog */}
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      {/* New/Edit Quote Dialog */}
+      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Novo Orçamento</DialogTitle>
+            <DialogTitle>{editingQuote ? 'Editar Orçamento' : 'Novo Orçamento'}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Cliente *</Label>
-                <Select
-                  value={formData.clientId}
-                  onValueChange={(value) => setFormData({ ...formData, clientId: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um cliente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clients.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Validade (dias)</Label>
-                <Input
-                  type="number"
-                  value={formData.validDays}
-                  onChange={(e) => setFormData({ ...formData, validDays: e.target.value })}
-                />
-              </div>
-            </div>
-
-            {/* Add Item */}
-            <div className="border border-border rounded-lg p-4">
-              <Label className="mb-3 block">Adicionar Item</Label>
-              <div className="grid grid-cols-4 gap-2">
-                <Select
-                  value={newItem.type}
-                  onValueChange={(value) => setNewItem({ ...newItem, type: value, itemId: '' })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="product">Produto</SelectItem>
-                    <SelectItem value="service">Serviço</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={newItem.itemId}
-                  onValueChange={(value) => setNewItem({ ...newItem, itemId: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {newItem.type === 'product'
-                      ? products.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name} - R$ {p.price.toFixed(2)}
-                          </SelectItem>
-                        ))
-                      : services.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.name} - R$ {s.price.toFixed(2)}
-                          </SelectItem>
-                        ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  type="number"
-                  min="1"
-                  value={newItem.quantity}
-                  onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })}
-                  placeholder="Qtd"
-                />
-                <Button type="button" onClick={handleAddItem}>
-                  <Plus className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-
-            {/* Items List */}
-            {formData.items.length > 0 && (
-              <div className="border border-border rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted">
-                    <tr>
-                      <th className="text-left p-3">Item</th>
-                      <th className="text-right p-3">Qtd</th>
-                      <th className="text-right p-3">Unit.</th>
-                      <th className="text-right p-3">Total</th>
-                      <th className="w-10"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {formData.items.map((item) => (
-                      <tr key={item.id} className="border-t border-border">
-                        <td className="p-3">{item.name}</td>
-                        <td className="text-right p-3">{item.quantity}</td>
-                        <td className="text-right p-3">R$ {item.unitPrice.toFixed(2)}</td>
-                        <td className="text-right p-3">R$ {item.total.toFixed(2)}</td>
-                        <td className="p-3">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveItem(item.id)}
-                          >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                    <tr className="border-t border-border bg-muted font-semibold">
-                      <td colSpan={3} className="p-3 text-right">
-                        Total:
-                      </td>
-                      <td className="text-right p-3">
-                        R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* Notes */}
-            <div>
-              <Label>Observações</Label>
-              <Textarea
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="Observações do orçamento..."
-                rows={3}
-              />
-            </div>
-
-            <div className="flex gap-2 justify-end pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit">Criar Orçamento</Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Convert to Sale Dialog */}
-      <Dialog open={isConvertOpen} onOpenChange={setIsConvertOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Converter em Venda</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-muted-foreground">
-              Converter orçamento de <strong>{selectedQuote?.clientName}</strong> no valor de{' '}
-              <strong>
-                R$ {selectedQuote?.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </strong>
-            </p>
-            <div>
-              <Label>Forma de Pagamento</Label>
-              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pix">PIX</SelectItem>
-                  <SelectItem value="cash">Dinheiro</SelectItem>
-                  <SelectItem value="credit">Cartão de Crédito</SelectItem>
-                  <SelectItem value="debit">Cartão de Débito</SelectItem>
-                  <SelectItem value="boleto">Boleto</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex gap-2 justify-end pt-4">
-              <Button variant="outline" onClick={() => setIsConvertOpen(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={handleConfirmConvert}>
-                <ArrowRightLeft className="w-4 h-4 mr-2" />
-                Converter
-              </Button>
-            </div>
-          </div>
+          <QuoteForm
+            initialData={editingQuote}
+            onSubmit={handleSaveQuote}
+            onCancel={() => setIsFormOpen(false)}
+          />
         </DialogContent>
       </Dialog>
 
@@ -537,6 +475,102 @@ Gráfica Express - Qualidade em impressão!`;
               </Button>
               <Button onClick={handleUpdateProductionStatus}>
                 Atualizar Status
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Payment Dialog */}
+      <Dialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Registrar Pagamento</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-muted-foreground">
+              Orçamento de <strong>{selectedQuote?.clientName}</strong>
+            </p>
+            <p className="text-sm">
+              Total do Orçamento: <strong>R$ {selectedQuote?.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
+            </p>
+            {selectedQuote && (
+              (() => {
+                const paidAmount = (selectedQuote.payments || []).reduce((acc, p) => acc + p.amount, 0);
+                const remaining = Math.max(0, (selectedQuote.total || 0) - paidAmount);
+                return (
+                  <>
+                    <p className="text-sm">Já Pago: <strong>R$ {paidAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong></p>
+                    <p className="text-sm">Faltam: <strong>R$ {remaining.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong></p>
+                  </>
+                );
+              })()
+            )}
+            <div>
+              <Label htmlFor="payment-amount">Valor do Pagamento *</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-2.5 text-muted-foreground">R$</span>
+                <Input
+                  id="payment-amount"
+                  type="text"
+                  placeholder="0,00"
+                  value={paymentAmount}
+                  onChange={(e) => {
+                    const value = e.target.value
+                      .replace(/\D/g, '')
+                      .replace(/(\d)(\d{2})$/g, '$1,$2')
+                      .replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1.');
+                    setPaymentAmount(value);
+                  }}
+                  className="pl-8"
+                />
+              </div>
+            </div>
+            <div>
+              <Label>Forma de Pagamento *</Label>
+              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pix">PIX</SelectItem>
+                  <SelectItem value="cash">Dinheiro</SelectItem>
+                  <SelectItem value="credit">Cartão de Crédito</SelectItem>
+                  <SelectItem value="debit">Cartão de Débito</SelectItem>
+                  <SelectItem value="boleto">Boleto</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedQuote?.payments && selectedQuote.payments.length > 0 && (
+              <div className="border-t pt-4">
+                <h4 className="font-semibold mb-2">Pagamentos Registrados</h4>
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {selectedQuote.payments.map((payment) => (
+                    <div key={payment.id} className="flex justify-between items-center text-sm bg-gray-50 p-2 rounded">
+                      <div>
+                        <p className="font-medium">R$ {payment.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                        <p className="text-xs text-gray-600 capitalize">{payment.method}</p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemovePayment(selectedQuote.id, payment.id)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        ×
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex gap-2 justify-end pt-4">
+              <Button variant="outline" onClick={() => setIsPaymentOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleAddPayment}>
+                <DollarSign className="w-4 h-4 mr-2" />
+                Registrar Pagamento
               </Button>
             </div>
           </div>

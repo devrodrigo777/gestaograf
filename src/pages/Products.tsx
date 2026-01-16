@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useStore } from '@/store/useStore';
-import { Product } from '@/types';
+import { Product, MeasurementUnit } from '@/types';
 import { PageHeader } from '@/components/ui/page-header';
 import { DataTable } from '@/components/ui/data-table';
 import { Button } from '@/components/ui/button';
@@ -13,12 +13,30 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { Image, Upload } from 'lucide-react';
+import { formatCurrency, parseCurrency } from '@/lib/formatters';
+
+const measurementUnitLabels: Record<MeasurementUnit, string> = {
+  unit: 'Unidade',
+  m2: 'm²',
+  linear_meter: 'Metro Linear',
+};
 
 export default function Products() {
-  const { products, addProduct, updateProduct, deleteProduct } = useStore();
+  const { products: allProducts, addProduct, updateProduct, deleteProduct, company } = useStore();
+  const products = useMemo(() => {
+    if (!company) return [];
+    return allProducts.filter((p) => p.companyId === company.id);
+  }, [allProducts, company]);
   const [isOpen, setIsOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState({
@@ -26,6 +44,7 @@ export default function Products() {
     description: '',
     price: '',
     category: '',
+    measurementUnit: 'unit' as MeasurementUnit,
     image: '',
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -50,7 +69,12 @@ export default function Products() {
       key: 'price' as const,
       header: 'Preço',
       render: (item: Product) =>
-        `R$ ${item.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+        item.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+    },
+    {
+      key: 'measurementUnit' as const,
+      header: 'Unidade',
+      render: (item: Product) => measurementUnitLabels[item.measurementUnit],
     },
     {
       key: 'createdAt' as const,
@@ -65,13 +89,21 @@ export default function Products() {
       setFormData({
         name: product.name,
         description: product.description,
-        price: product.price.toString(),
+        price: formatCurrency(product.price),
         category: product.category,
+        measurementUnit: product.measurementUnit,
         image: product.image || '',
       });
     } else {
       setEditingProduct(null);
-      setFormData({ name: '', description: '', price: '', category: '', image: '' });
+      setFormData({
+        name: '',
+        description: '',
+        price: '',
+        category: '',
+        measurementUnit: 'unit',
+        image: '',
+      });
     }
     setIsOpen(true);
   };
@@ -87,6 +119,11 @@ export default function Products() {
     }
   };
 
+  const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawValue = e.target.value.replace(/\D/g, '');
+    setFormData({ ...formData, price: formatCurrency(rawValue) });
+  };
+  
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -95,29 +132,29 @@ export default function Products() {
       return;
     }
 
-    const price = parseFloat(formData.price.replace(',', '.'));
+    const price = parseCurrency(formData.price);
     if (isNaN(price)) {
       toast.error('Preço inválido');
       return;
     }
 
+    const productData = {
+      name: formData.name,
+      description: formData.description,
+      price,
+      category: formData.category,
+      measurementUnit: formData.measurementUnit,
+      image: formData.image,
+    };
+
     if (editingProduct) {
-      updateProduct(editingProduct.id, {
-        name: formData.name,
-        description: formData.description,
-        price,
-        category: formData.category,
-        image: formData.image,
-      });
+      updateProduct(editingProduct.id, productData);
       toast.success('Produto atualizado com sucesso!');
     } else {
       const newProduct: Product = {
         id: crypto.randomUUID(),
-        name: formData.name,
-        description: formData.description,
-        price,
-        category: formData.category,
-        image: formData.image,
+        companyId: company!.id,
+        ...productData,
         createdAt: new Date().toISOString(),
       };
       addProduct(newProduct);
@@ -166,22 +203,40 @@ export default function Products() {
                 placeholder="Nome do produto"
               />
             </div>
-            <div>
-              <Label htmlFor="category">Categoria *</Label>
-              <Input
-                id="category"
-                value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                placeholder="Ex: Impressão, Acabamento"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="category">Categoria *</Label>
+                <Input
+                  id="category"
+                  value={formData.category}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  placeholder="Ex: Impressão"
+                />
+              </div>
+              <div>
+                <Label htmlFor="measurementUnit">Unidade de Medida *</Label>
+                <Select
+                  value={formData.measurementUnit}
+                  onValueChange={(value) => setFormData({ ...formData, measurementUnit: value as MeasurementUnit })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unit">Unidade</SelectItem>
+                    <SelectItem value="m2">m²</SelectItem>
+                    <SelectItem value="linear_meter">Metro Linear</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div>
               <Label htmlFor="price">Preço *</Label>
               <Input
                 id="price"
                 value={formData.price}
-                onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                placeholder="0,00"
+                onChange={handlePriceChange}
+                placeholder="R$ 0,00"
               />
             </div>
             <div>

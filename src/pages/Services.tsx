@@ -15,9 +15,11 @@ import {
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { formatCurrency, parseCurrency } from '@/lib/formatters';
 
 export default function Services() {
-  const { services, addService, updateService, deleteService } = useStore();
+  const { getServices, addService, updateService, deleteService, company } = useStore();
+  const services = getServices();
   const [isOpen, setIsOpen] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [formData, setFormData] = useState({
@@ -34,7 +36,7 @@ export default function Services() {
       key: 'price' as const,
       header: 'Preço',
       render: (item: Service) =>
-        `R$ ${item.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+        item.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
     },
     { key: 'duration' as const, header: 'Duração' },
     {
@@ -50,7 +52,7 @@ export default function Services() {
       setFormData({
         name: service.name,
         description: service.description,
-        price: service.price.toString(),
+        price: formatCurrency(service.price),
         duration: service.duration || '',
       });
     } else {
@@ -58,6 +60,11 @@ export default function Services() {
       setFormData({ name: '', description: '', price: '', duration: '' });
     }
     setIsOpen(true);
+  };
+  
+  const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawValue = e.target.value.replace(/\D/g, '');
+    setFormData({ ...formData, price: formatCurrency(rawValue) });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -68,27 +75,27 @@ export default function Services() {
       return;
     }
 
-    const price = parseFloat(formData.price.replace(',', '.'));
+    const price = parseCurrency(formData.price);
     if (isNaN(price)) {
       toast.error('Preço inválido');
       return;
     }
 
+    const serviceData = {
+      name: formData.name,
+      description: formData.description,
+      price,
+      duration: formData.duration,
+    };
+
     if (editingService) {
-      updateService(editingService.id, {
-        name: formData.name,
-        description: formData.description,
-        price,
-        duration: formData.duration,
-      });
+      updateService(editingService.id, serviceData);
       toast.success('Serviço atualizado com sucesso!');
     } else {
       const newService: Service = {
         id: crypto.randomUUID(),
-        name: formData.name,
-        description: formData.description,
-        price,
-        duration: formData.duration,
+        companyId: company!.id,
+        ...serviceData,
         createdAt: new Date().toISOString(),
       };
       addService(newService);
@@ -142,8 +149,8 @@ export default function Services() {
               <Input
                 id="price"
                 value={formData.price}
-                onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                placeholder="0,00"
+                onChange={handlePriceChange}
+                placeholder="R$ 0,00"
               />
             </div>
             <div>

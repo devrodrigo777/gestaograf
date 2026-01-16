@@ -14,9 +14,11 @@ import {
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { InputMask } from '@react-input/mask';
 
 export default function Clients() {
-  const { clients, addClient, updateClient, deleteClient } = useStore();
+  const { getClients, addClient, updateClient, deleteClient, company } = useStore();
+  const clients = getClients();
   const [isOpen, setIsOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [formData, setFormData] = useState({
@@ -55,22 +57,29 @@ export default function Clients() {
     }
     setIsOpen(true);
   };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.name || !formData.email || !formData.phone) {
+    if (!formData.name || !formData.phone) {
       toast.error('Preencha os campos obrigatórios');
       return;
     }
 
+    // The mask library handles unmasking, but let's be safe
+    const unmaskedData = {
+      ...formData,
+      phone: formData.phone.replace(/\D/g, ''),
+      cpfCnpj: formData.cpfCnpj.replace(/\D/g, ''),
+    }
+
     if (editingClient) {
-      updateClient(editingClient.id, formData);
+      updateClient(editingClient.id, unmaskedData);
       toast.success('Cliente atualizado com sucesso!');
     } else {
       const newClient: Client = {
         id: crypto.randomUUID(),
-        ...formData,
+        companyId: company!.id,
+        ...unmaskedData,
         createdAt: new Date().toISOString(),
       };
       addClient(newClient);
@@ -86,6 +95,11 @@ export default function Clients() {
       toast.success('Cliente excluído com sucesso!');
     }
   };
+
+    const cpfCnpjMask =
+    formData.cpfCnpj.replace(/\D/g, '').length < 11
+      ? '___.___.___-__'
+      : '__.___.___/____-__';
 
   return (
     <div className="p-6">
@@ -120,7 +134,7 @@ export default function Clients() {
               />
             </div>
             <div>
-              <Label htmlFor="email">E-mail *</Label>
+              <Label htmlFor="email">E-mail</Label>
               <Input
                 id="email"
                 type="email"
@@ -131,20 +145,26 @@ export default function Clients() {
             </div>
             <div>
               <Label htmlFor="phone">Telefone *</Label>
-              <Input
+              <InputMask
                 id="phone"
+                component={Input}
+                mask="(__) _____-____"
+                replacement={{ _: /\d/ }}
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                placeholder="(00) 00000-0000"
+                placeholder="(__) _____-____"
               />
             </div>
             <div>
               <Label htmlFor="cpfCnpj">CPF/CNPJ</Label>
-              <Input
+              <InputMask
                 id="cpfCnpj"
+                component={Input}
+                mask={cpfCnpjMask}
+                replacement={{ _: /\d/ }}
                 value={formData.cpfCnpj}
                 onChange={(e) => setFormData({ ...formData, cpfCnpj: e.target.value })}
-                placeholder="000.000.000-00"
+                placeholder={cpfCnpjMask}
               />
             </div>
             <div>

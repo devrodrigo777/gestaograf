@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Home,
   Users,
@@ -9,22 +9,35 @@ import {
   BarChart3,
   ChevronLeft,
   Menu,
+  LogOut,
+  Settings,
+  ClipboardList,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
+import { useStore } from '@/store/useStore';
 
 const menuItems = [
   { icon: Home, label: 'Home', path: '/' },
   { icon: Users, label: 'Clientes', path: '/clientes' },
   { icon: Package, label: 'Produtos', path: '/produtos' },
   { icon: Wrench, label: 'Serviços', path: '/servicos' },
+  { icon: ClipboardList, label: 'Atividades', path: '/atividades', blinking: true },
   { icon: FileText, label: 'Orçamentos', path: '/orcamentos' },
   { icon: DollarSign, label: 'Vendas', path: '/vendas' },
   { icon: BarChart3, label: 'Relatórios', path: '/relatorios' },
+  { icon: Settings, label: 'Configurações', path: '/configuracoes' },
 ];
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const navigate = useNavigate();
+  const { logout, user, company } = useStore();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   return (
     <aside
@@ -45,8 +58,8 @@ export function Sidebar() {
       {/* Company Name */}
       {!collapsed && (
         <div className="text-center py-3 border-b border-white/10">
-          <h2 className="text-sidebar-header font-semibold text-sm">Gráfica Express</h2>
-          <p className="text-sidebar-text text-xs">Sistema de Gestão</p>
+          <h2 className="text-sidebar-header font-semibold text-sm">{company?.name || 'Sua Empresa'}</h2>
+          <p className="text-sidebar-text text-xs">{user?.username || 'Usuário'}</p>
         </div>
       )}
 
@@ -67,9 +80,26 @@ export function Sidebar() {
           >
             <item.icon className="w-5 h-5 flex-shrink-0" />
             {!collapsed && <span className="text-sm font-medium">{item.label}</span>}
+            {!collapsed && item.blinking && (
+              <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+            )}
           </NavLink>
         ))}
       </nav>
+
+      {/* Logout Button */}
+      <button
+        onClick={handleLogout}
+        className={cn(
+          'flex items-center gap-3 px-4 py-3 mx-2 rounded-lg transition-colors mb-2',
+          'text-red-400 hover:text-red-300 hover:bg-red-500/10',
+          collapsed && 'justify-center'
+        )}
+        title="Logout"
+      >
+        <LogOut className="w-5 h-5 flex-shrink-0" />
+        {!collapsed && <span className="text-sm font-medium">Sair</span>}
+      </button>
 
       {/* Toggle Button */}
       <button

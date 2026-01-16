@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useStore } from '@/store/useStore';
 import { PageHeader } from '@/components/ui/page-header';
 import { DashboardChart } from '@/components/dashboard/DashboardChart';
@@ -13,38 +13,36 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { format, startOfMonth, endOfMonth, isWithinInterval, subMonths, parseISO } from 'date-fns';
+import { format, startOfMonth, endOfMonth, isWithinInterval, subMonths, parseISO, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { BarChart3, FileText, DollarSign, TrendingUp } from 'lucide-react';
 
 export default function Reports() {
-  const { sales, quotes } = useStore();
+  const { sales: allSales, quotes: allQuotes, company } = useStore();
+  const sales = allSales.filter(s => s.companyId === company?.id);
+  const quotes = allQuotes.filter(q => q.companyId === company?.id);
   const [dateFilter, setDateFilter] = useState({
     start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
     end: format(endOfMonth(new Date()), 'yyyy-MM-dd'),
   });
 
-  const filteredSales = useMemo(() => {
-    return sales.filter((sale) => {
-      const saleDate = new Date(sale.createdAt);
-      return isWithinInterval(saleDate, {
+  const filteredSales = sales.filter((sale) => {
+    const saleDate = new Date(sale.createdAt);
+    return isWithinInterval(saleDate, {
         start: parseISO(dateFilter.start),
-        end: parseISO(dateFilter.end),
+        end: endOfDay(parseISO(dateFilter.end)),
       });
     });
-  }, [sales, dateFilter]);
 
-  const filteredQuotes = useMemo(() => {
-    return quotes.filter((quote) => {
-      const quoteDate = new Date(quote.createdAt);
-      return isWithinInterval(quoteDate, {
-        start: parseISO(dateFilter.start),
-        end: parseISO(dateFilter.end),
-      });
+  const filteredQuotes = quotes.filter((quote) => {
+    const quoteDate = new Date(quote.createdAt);
+    return isWithinInterval(quoteDate, {
+      start: parseISO(dateFilter.start),
+      end: endOfDay(parseISO(dateFilter.end)),
     });
-  }, [quotes, dateFilter]);
+  });
 
-  const salesStats = useMemo(() => {
+  const salesStats = (() => {
     const total = filteredSales.reduce((acc, sale) => acc + sale.total, 0);
     const paid = filteredSales.filter((s) => s.status === 'paid');
     const paidTotal = paid.reduce((acc, sale) => acc + sale.total, 0);
@@ -59,9 +57,17 @@ export default function Reports() {
       pendingCount: pending.length,
       pendingTotal,
     };
-  }, [filteredSales]);
+  })();
 
-  const quoteStats = useMemo(() => {
+  const quotesPendingStats = (() => {
+    const pendingQuotes = filteredQuotes.filter(q => q.status === 'pending');
+    const pendingTotal = pendingQuotes.reduce((acc, q) => acc + q.total, 0);
+    return {
+      count: pendingQuotes.length,
+      total: pendingTotal,
+    };
+  })();
+  const quoteStats = (() => {
     const total = filteredQuotes.reduce((acc, quote) => acc + quote.total, 0);
     const pending = filteredQuotes.filter((q) => q.status === 'pending');
     const approved = filteredQuotes.filter((q) => q.status === 'approved');
@@ -82,9 +88,9 @@ export default function Reports() {
       rejectedCount: rejected.length,
       conversionRate,
     };
-  }, [filteredQuotes]);
+  })();
 
-  const monthlySalesData = useMemo(() => {
+  const monthlySalesData = (() => {
     const months = [];
     for (let i = 5; i >= 0; i--) {
       const month = subMonths(new Date(), i);
@@ -92,7 +98,7 @@ export default function Reports() {
       const monthEnd = endOfMonth(month);
 
       const total = sales
-        .filter((s) => isWithinInterval(new Date(s.createdAt), { start: monthStart, end: monthEnd }))
+        .filter((s) => isWithinInterval(new Date(s.createdAt), { start: monthStart, end: endOfDay(monthEnd) }))
         .reduce((acc, s) => acc + s.total, 0);
 
       months.push({
@@ -101,9 +107,9 @@ export default function Reports() {
       });
     }
     return months;
-  }, [sales]);
+  })();
 
-  const monthlyQuotesData = useMemo(() => {
+  const monthlyQuotesData = (() => {
     const months = [];
     for (let i = 5; i >= 0; i--) {
       const month = subMonths(new Date(), i);
@@ -111,7 +117,7 @@ export default function Reports() {
       const monthEnd = endOfMonth(month);
 
       const total = quotes
-        .filter((q) => isWithinInterval(new Date(q.createdAt), { start: monthStart, end: monthEnd }))
+        .filter((q) => isWithinInterval(new Date(q.createdAt), { start: monthStart, end: endOfDay(monthEnd) }))
         .reduce((acc, q) => acc + q.total, 0);
 
       months.push({
@@ -120,7 +126,7 @@ export default function Reports() {
       });
     }
     return months;
-  }, [quotes]);
+  })();
 
   return (
     <div className="p-6">
@@ -304,7 +310,12 @@ export default function Reports() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold text-badge-warning">{quoteStats.pendingCount}</p>
+                <p className="text-2xl font-bold text-badge-warning">
+                  {quotesPendingStats.count}
+                  <span className="text-sm font-normal text-muted-foreground ml-2">
+                    (R$ {quotesPendingStats.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+                  </span>
+                </p>
               </CardContent>
             </Card>
             <Card>

@@ -182,7 +182,64 @@ export default function TrackOrder() {
           </div>
         </div>
 
-        {/* Notes */}
+        {/* Payments */}
+        {quote.payments && quote.payments.length > 0 && (
+          <div className="bg-card rounded-lg border border-border p-6 mt-8 animate-fade-in">
+            <h2 className="text-lg font-semibold text-foreground mb-4">Pagamentos Registrados</h2>
+            
+            <div className="space-y-3 mb-6">
+              {quote.payments.map((payment) => (
+                <div key={payment.id} className="flex justify-between items-start p-3 bg-muted rounded-lg">
+                  <div>
+                    <p className="font-medium text-foreground">
+                      R$ {payment.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-sm text-muted-foreground capitalize">
+                      {payment.method === 'cash' && 'Dinheiro'}
+                      {payment.method === 'credit' && 'Cartão de Crédito'}
+                      {payment.method === 'debit' && 'Cartão de Débito'}
+                      {payment.method === 'pix' && 'PIX'}
+                      {payment.method === 'boleto' && 'Boleto'}
+                    </p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {format(new Date(payment.createdAt), 'dd/MM/yyyy HH:mm')}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="border-t border-border pt-4 space-y-2">
+              <div className="flex justify-between">
+                <p className="text-muted-foreground">Já Pago:</p>
+                <p className="font-semibold text-green-600">
+                  R$ {quote.payments.reduce((acc, p) => acc + p.amount, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              <div className="flex justify-between">
+                <p className="text-muted-foreground">Faltando:</p>
+                <p className="font-semibold text-orange-600">
+                  R$ {Math.max(0, quote.total - quote.payments.reduce((acc, p) => acc + p.amount, 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              {(() => {
+                const totalPaid = quote.payments.reduce((acc, p) => acc + p.amount, 0);
+                const difference = totalPaid - quote.total;
+                if (difference > 0) {
+                  return (
+                    <div className="flex justify-between pt-2 border-t border-border">
+                      <p className="text-muted-foreground font-semibold">Diferença (Excedente):</p>
+                      <p className="font-semibold text-blue-600">
+                        +R$ {difference.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+            </div>
+          </div>
+        )}
         {quote.notes && (
           <div className="bg-card rounded-lg border border-border p-6 mt-8 animate-fade-in">
             <h2 className="text-lg font-semibold text-foreground mb-2">Observações</h2>
