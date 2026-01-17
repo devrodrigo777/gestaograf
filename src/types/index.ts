@@ -14,6 +14,7 @@ export interface User {
   email?: string;
   companyId: string;
   createdAt: string;
+  empresa?: string; // Coluna empresa do banco de dados
 }
 
 export interface AuthState {
@@ -28,7 +29,6 @@ export interface Product {
   name: string;
   description: string;
   price: number;
-  image?: string;
   category: string;
   measurementUnit: MeasurementUnit;
   createdAt: string;

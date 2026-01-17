@@ -96,7 +96,7 @@ export function Sidebar() {
       {/* Informações da empresa e usuário - Oculto quando colapsado */}
       {!collapsed && (
         <div className="text-center py-3 border-b border-white/10">
-          <h2 className="text-sidebar-header font-semibold text-sm">{company?.name || 'Sua Empresa'}</h2>
+          <h2 className="text-sidebar-header font-semibold text-sm">{user?.empresa || company?.name || 'Sua Empresa'}</h2>
           <p className="text-sidebar-text text-xs">{user?.username || 'Usuário'}</p>
         </div>
       )}

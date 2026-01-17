@@ -15,11 +15,14 @@ import {
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { InputMask } from '@react-input/mask';
+import { useEffect } from 'react';
 
 export default function Clients() {
-  const { getClients, addClient, updateClient, deleteClient, company } = useStore();
-  const clients = getClients();
+  const { getClients, addClient, updateClient, deleteClient, user, company, loadClients } = useStore();
+  // re-renderização quando clients mudam
+  const clients = useStore((state) => state.clients);
   const [isOpen, setIsOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -28,6 +31,16 @@ export default function Clients() {
     address: '',
     cpfCnpj: '',
   });
+
+  // Carregar clientes ao montar o componente
+  useEffect(() => {
+    if (user?.id) {
+      setIsLoading(true);
+      loadClients().finally(() => {
+        setIsLoading(false);
+    });
+    }
+  }, [user?.id, loadClients]);
 
   const columns = [
     { key: 'name' as const, header: 'Nome' },
@@ -57,7 +70,7 @@ export default function Clients() {
     }
     setIsOpen(true);
   };
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.name || !formData.phone) {
@@ -72,27 +85,49 @@ export default function Clients() {
       cpfCnpj: formData.cpfCnpj.replace(/\D/g, ''),
     }
 
-    if (editingClient) {
-      updateClient(editingClient.id, unmaskedData);
-      toast.success('Cliente atualizado com sucesso!');
-    } else {
-      const newClient: Client = {
-        id: crypto.randomUUID(),
-        companyId: company!.id,
-        ...unmaskedData,
-        createdAt: new Date().toISOString(),
-      };
-      addClient(newClient);
-      toast.success('Cliente cadastrado com sucesso!');
-    }
+    setIsLoading(true);
+    try {
+      if (editingClient) {
+        await updateClient(editingClient.id, unmaskedData);
+        toast.success('Cliente atualizado com sucesso!');
+      } else {
+        // O companyId será preenchido pelo serviço baseado no usuário autenticado
+        const newClient: Client = {
+          id: crypto.randomUUID(),
+          companyId: '', // Será preenchido pelo serviço
+          ...unmaskedData,
+          createdAt: new Date().toISOString(),
+        };
+        await addClient(newClient);
+        toast.success('Cliente cadastrado com sucesso!');
+      }
 
-    setIsOpen(false);
+      setIsOpen(false);
+      // Recarregar clientes após adicionar/editar
+      setIsLoading(true);
+      await loadClients().finally(() => setIsLoading(false));
+    } catch (error) {
+      console.error('Erro ao salvar cliente:', error);
+      toast.error('Erro ao salvar cliente');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleDelete = (client: Client) => {
+  const handleDelete = async (client: Client) => {
     if (confirm('Tem certeza que deseja excluir este cliente?')) {
-      deleteClient(client.id);
-      toast.success('Cliente excluído com sucesso!');
+      setIsLoading(true);
+      try {
+        await deleteClient(client.id);
+        toast.success('Cliente excluído com sucesso!');
+        // Recarregar clientes após deletar
+        await loadClients();
+      } catch (error) {
+        console.error('Erro ao excluir cliente:', error);
+        toast.error('Erro ao excluir cliente');
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -177,10 +212,10 @@ export default function Clients() {
               />
             </div>
             <div className="flex gap-2 justify-end pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
+              <Button type="button" variant="outline" onClick={() => setIsOpen(false)} disabled={isLoading}>
                 Cancelar
               </Button>
-              <Button type="submit">
+              <Button type="submit" disabled={isLoading}>
                 {editingClient ? 'Salvar' : 'Cadastrar'}
               </Button>
             </div>

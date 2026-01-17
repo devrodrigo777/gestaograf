@@ -2,6 +2,18 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Product, Service, Client, Quote, Sale, User, Company } from '@/types';
 import { supabase } from '@/lib/supabaseClient';
+import {
+  getClientsFromSupabase,
+  createClientInSupabase,
+  updateClientInSupabase,
+  deleteClientFromSupabase,
+} from '@/services/clientService';
+import {
+  getProductsFromSupabase,
+  createProductInSupabase,
+  updateProductInSupabase,
+  deleteProductFromSupabase,
+} from '@/services/productService';
 
 /**
  * Interface Store
@@ -38,11 +50,11 @@ interface Store {
   updateUser: (user: Partial<User>) => void;
   
   // ==================== MÉTODOS DE PRODUTOS ====================
-  addProduct: (product: Product) => void;
-  updateProduct: (id: string, product: Partial<Product>) => void;
-  deleteProduct: (id: string) => void;
+  addProduct: (product: Product) => Promise<void>;
+  updateProduct: (id: string, product: Partial<Product>) => Promise<void>;
+  deleteProduct: (id: string) => Promise<void>;
   getProducts: () => Product[];
-  
+  loadProducts: () => Promise<void>;
   // ==================== MÉTODOS DE SERVIÇOS ====================
   addService: (service: Service) => void;
   updateService: (id: string, service: Partial<Service>) => void;
@@ -50,10 +62,11 @@ interface Store {
   getServices: () => Service[];
   
   // ==================== MÉTODOS DE CLIENTES ====================
-  addClient: (client: Client) => void;
-  updateClient: (id: string, client: Partial<Client>) => void;
-  deleteClient: (id: string) => void;
+  addClient: (client: Client) => Promise<void>;
+  updateClient: (id: string, client: Partial<Client>) => Promise<void>;
+  deleteClient: (id: string) => Promise<void>;
   getClients: () => Client[];
+  loadClients: () => Promise<void>;
   
   // ==================== MÉTODOS DE ORÇAMENTOS ====================
   addQuote: (quote: Quote) => void;
@@ -177,6 +190,7 @@ export const useStore = create<Store>()(
           password: '', // Não usado com Supabase (autenticação é via OAuth)
           companyId: '1', // Usar companyId padrão
           createdAt: new Date().toISOString(),
+          empresa: supabaseUser.user_metadata?.empresa || 'Minha Empresa', // Recuperar coluna empresa
         };
 
         // Atualizar store com novo usuário
@@ -206,17 +220,36 @@ export const useStore = create<Store>()(
       }),
 
       // Products
-      addProduct: (product) => set((state) => ({ products: [...state.products, product] })),
-      updateProduct: (id, product) => set((state) => ({
-        products: state.products.map((p) => p.id === id ? { ...p, ...product } : p)
-      })),
-      deleteProduct: (id) => set((state) => ({
-        products: state.products.filter((p) => p.id !== id)
-      })),
+      addProduct: async (product) => {
+        const createdProduct = await createProductInSupabase(product);
+        if (createdProduct) {
+          set((state) => ({ products: [...state.products, createdProduct] }));
+        }
+      },
+      updateProduct: async (id, product) => {
+        const updatedProduct = await updateProductInSupabase(id, product);
+        if (updatedProduct) {
+          set((state) => ({
+            products: state.products.map((p) => p.id === id ? updatedProduct : p)
+          }));
+        }
+      },
+      deleteProduct: async (id) => {
+        const success = await deleteProductFromSupabase(id);
+        if (success) {
+          set((state) => ({
+            products: state.products.filter((p) => p.id !== id)
+          }));
+        }
+      },
       getProducts: () => {
         const state = get();
         if (!state.company) return [];
         return state.products.filter(p => p.companyId === state.company!.id);
+      },
+      loadProducts: async () => {
+        const products = await getProductsFromSupabase();
+        set({ products });
       },
 
       // Services
@@ -234,17 +267,36 @@ export const useStore = create<Store>()(
       },
 
       // Clients
-      addClient: (client) => set((state) => ({ clients: [...state.clients, client] })),
-      updateClient: (id, client) => set((state) => ({
-        clients: state.clients.map((c) => c.id === id ? { ...c, ...client } : c)
-      })),
-      deleteClient: (id) => set((state) => ({
-        clients: state.clients.filter((c) => c.id !== id)
-      })),
+      addClient: async (client) => {
+        const createdClient = await createClientInSupabase(client);
+        if (createdClient) {
+          set((state) => ({ clients: [...state.clients, createdClient] }));
+        }
+      },
+      updateClient: async (id, client) => {
+        const updatedClient = await updateClientInSupabase(id, client);
+        if (updatedClient) {
+          set((state) => ({
+            clients: state.clients.map((c) => c.id === id ? updatedClient : c)
+          }));
+        }
+      },
+      deleteClient: async (id) => {
+        const success = await deleteClientFromSupabase(id);
+        if (success) {
+          set((state) => ({
+            clients: state.clients.filter((c) => c.id !== id)
+          }));
+        }
+      },
       getClients: () => {
         const state = get();
         if (!state.company) return [];
         return state.clients.filter(c => c.companyId === state.company!.id);
+      },
+      loadClients: async () => {
+        const clients = await getClientsFromSupabase();
+        set({ clients });
       },
 
       // Quotes

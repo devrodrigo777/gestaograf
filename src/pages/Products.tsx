@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { Product, MeasurementUnit } from '@/types';
 import { PageHeader } from '@/components/ui/page-header';
@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { Image, Upload } from 'lucide-react';
+// Removed Image and Upload imports as they were only used for image field
 import { formatCurrency, parseCurrency } from '@/lib/formatters';
 
 const measurementUnitLabels: Record<MeasurementUnit, string> = {
@@ -32,12 +32,11 @@ const measurementUnitLabels: Record<MeasurementUnit, string> = {
 };
 
 export default function Products() {
-  const { products: allProducts, addProduct, updateProduct, deleteProduct, company } = useStore();
-  const products = useMemo(() => {
-    if (!company) return [];
-    return allProducts.filter((p) => p.companyId === company.id);
-  }, [allProducts, company]);
+  const { addProduct, updateProduct, deleteProduct, user, loadProducts } = useStore();
+  // Use products diretamente do store para garantir re-renderização
+  const products = useStore((state) => state.products);
   const [isOpen, setIsOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -45,24 +44,17 @@ export default function Products() {
     price: '',
     category: '',
     measurementUnit: 'unit' as MeasurementUnit,
-    image: '',
   });
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Carregar produtos ao montar o componente
+  useEffect(() => {
+    if (user?.id) {
+      setIsLoading(true);
+      loadProducts().finally(() => setIsLoading(false));
+    }
+  }, [user?.id, loadProducts]);
 
   const columns = [
-    {
-      key: 'image' as const,
-      header: 'Imagem',
-      render: (item: Product) => (
-        <div className="w-12 h-12 rounded bg-muted flex items-center justify-center overflow-hidden">
-          {item.image ? (
-            <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-          ) : (
-            <Image className="w-6 h-6 text-muted-foreground" />
-          )}
-        </div>
-      ),
-    },
     { key: 'name' as const, header: 'Nome' },
     { key: 'category' as const, header: 'Categoria' },
     {
@@ -92,7 +84,6 @@ export default function Products() {
         price: formatCurrency(product.price),
         category: product.category,
         measurementUnit: product.measurementUnit,
-        image: product.image || '',
       });
     } else {
       setEditingProduct(null);
@@ -102,21 +93,9 @@ export default function Products() {
         price: '',
         category: '',
         measurementUnit: 'unit',
-        image: '',
       });
     }
     setIsOpen(true);
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData({ ...formData, image: reader.result as string });
-      };
-      reader.readAsDataURL(file);
-    }
   };
 
   const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -124,7 +103,7 @@ export default function Products() {
     setFormData({ ...formData, price: formatCurrency(rawValue) });
   };
   
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.name || !formData.price || !formData.category) {
@@ -144,30 +123,50 @@ export default function Products() {
       price,
       category: formData.category,
       measurementUnit: formData.measurementUnit,
-      image: formData.image,
     };
 
-    if (editingProduct) {
-      updateProduct(editingProduct.id, productData);
-      toast.success('Produto atualizado com sucesso!');
-    } else {
-      const newProduct: Product = {
-        id: crypto.randomUUID(),
-        companyId: company!.id,
-        ...productData,
-        createdAt: new Date().toISOString(),
-      };
-      addProduct(newProduct);
-      toast.success('Produto cadastrado com sucesso!');
-    }
+    setIsLoading(true);
+    try {
+      if (editingProduct) {
+        await updateProduct(editingProduct.id, productData);
+        toast.success('Produto atualizado com sucesso!');
+      } else {
+        // O companyId será preenchido pelo serviço baseado no usuário autenticado
+        const newProduct: Product = {
+          id: crypto.randomUUID(),
+          companyId: '', // Será preenchido pelo serviço
+          ...productData,
+          createdAt: new Date().toISOString(),
+        };
+        await addProduct(newProduct);
+        toast.success('Produto cadastrado com sucesso!');
+      }
 
-    setIsOpen(false);
+      setIsOpen(false);
+      // Recarregar produtos após adicionar/editar
+      await loadProducts();
+    } catch (error) {
+      console.error('Erro ao salvar produto:', error);
+      toast.error('Erro ao salvar produto');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleDelete = (product: Product) => {
+  const handleDelete = async (product: Product) => {
     if (confirm('Tem certeza que deseja excluir este produto?')) {
-      deleteProduct(product.id);
-      toast.success('Produto excluído com sucesso!');
+      setIsLoading(true);
+      try {
+        await deleteProduct(product.id);
+        toast.success('Produto excluído com sucesso!');
+        // Recarregar produtos após deletar
+        await loadProducts();
+      } catch (error) {
+        console.error('Erro ao excluir produto:', error);
+        toast.error('Erro ao excluir produto');
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -249,41 +248,11 @@ export default function Products() {
                 rows={3}
               />
             </div>
-            <div>
-              <Label>Imagem</Label>
-              <div className="mt-2 flex items-center gap-4">
-                <div className="w-20 h-20 rounded-lg bg-muted flex items-center justify-center overflow-hidden border-2 border-dashed border-border">
-                  {formData.image ? (
-                    <img src={formData.image} alt="Preview" className="w-full h-full object-cover" />
-                  ) : (
-                    <Image className="w-8 h-8 text-muted-foreground" />
-                  )}
-                </div>
-                <div>
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleImageUpload}
-                    accept="image/*"
-                    className="hidden"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <Upload className="w-4 h-4 mr-2" />
-                    Upload
-                  </Button>
-                </div>
-              </div>
-            </div>
             <div className="flex gap-2 justify-end pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
+              <Button type="button" variant="outline" onClick={() => setIsOpen(false)} disabled={isLoading}>
                 Cancelar
               </Button>
-              <Button type="submit">
+              <Button type="submit" disabled={isLoading}>
                 {editingProduct ? 'Salvar' : 'Cadastrar'}
               </Button>
             </div>
