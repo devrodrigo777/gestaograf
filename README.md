@@ -69,7 +69,7 @@ VITE_SUPABASE_ANON_KEY=sua_chave_anonima
 
 3. **Execute o SQL de setup**
 
-No editor SQL do Supabase, execute `SUPABASE_STARTSETUP.sql` para criar as tabelas.
+No editor SQL do Supabase, execute `schema.sql` para criar as tabelas.
 
 4. **Inicie o desenvolvimento**
 ```bash
@@ -116,9 +116,8 @@ src/
 | **Vendas** | Vendas e pagamentos |
 | **Atividades** | Feed de atividades recentes |
 | **Relatórios** | Análise de dados |
-| **Status** | Status de pedidos em produção |
+| **Status** | Status do sistema |
 | **TrackOrder** | Link público para clientes |
-| **Configurações** | Preferências da aplicação |
 
 ## 🔐 Segurança
 
@@ -157,7 +156,7 @@ Dúvidas? Abra uma issue no repositório!
 
 ---
 
-**Desenvolvido com ❤️ para gráficas modernas**
+**Desenvolvido com ❤️ por Rodrigo Lopes (RodrigoLCA)**
 
 The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
 
