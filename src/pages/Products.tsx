@@ -81,7 +81,7 @@ export default function Products() {
       setFormData({
         name: product.name,
         description: product.description,
-        price: formatCurrency(product.price),
+        price: formatCurrency(product.price * 100), // Converter para formato de moeda
         category: product.category,
         measurementUnit: product.measurementUnit,
       });
