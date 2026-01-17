@@ -188,7 +188,7 @@ export const useStore = create<Store>()(
             company: null, 
             supabaseUser: null 
           });
-
+          
           // 3. Opcional: Redireciona para o login ou recarrega a página para limpar o cache
           window.location.href = '/login';
         }

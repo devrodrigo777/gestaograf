@@ -592,3 +592,100 @@ CREATE INDEX idx_orcamentos_cliente_id ON orcamentos(cliente_id);
 CREATE INDEX idx_orcamentos_criado_em ON orcamentos(criado_em DESC);
 CREATE INDEX idx_orcamentos_itens_orcamento_id ON orcamentos_itens(orcamento_id);
 CREATE INDEX idx_orcamentos_pagamentos_orcamento_id ON orcamentos_pagamentos(orcamento_id);
+
+
+
+
+
+-- INICIO DO STRIPE
+
+-- UUID helper (se ainda não tiver)
+create extension if not exists "pgcrypto"; -- para gen_random_uuid()[3]
+
+-- 1) Mapeamento: Supabase user -> Stripe customer
+create table if not exists public.stripe_customers (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  stripe_customer_id text not null unique,
+  email text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists stripe_customers_customer_id_idx
+  on public.stripe_customers (stripe_customer_id);
+
+alter table public.stripe_customers enable row level security;
+
+drop policy if exists "stripe_customers_select_own" on public.stripe_customers;
+create policy "stripe_customers_select_own"
+on public.stripe_customers
+for select
+to authenticated
+using ((select auth.uid()) = user_id); -- padrão RLS com auth.uid()[1]
+
+-- Bloqueia escrita pelo client (escrita via Edge Function/service role)
+revoke insert, update, delete on public.stripe_customers from anon, authenticated;
+
+
+-- 2) Estado da assinatura (1 user -> 0/1 assinatura “principal”)
+create table if not exists public.stripe_subscriptions (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+
+  stripe_subscription_id text not null unique,
+  status text not null,         -- active, trialing, past_due, canceled...
+  price_id text not null,       -- price_... recorrente
+  cancel_at_period_end boolean not null default false,
+
+  current_period_start timestamptz,
+  current_period_end timestamptz,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists stripe_subscriptions_status_idx
+  on public.stripe_subscriptions (status);
+
+create index if not exists stripe_subscriptions_period_end_idx
+  on public.stripe_subscriptions (current_period_end);
+
+alter table public.stripe_subscriptions enable row level security;
+
+drop policy if exists "stripe_subscriptions_select_own" on public.stripe_subscriptions;
+create policy "stripe_subscriptions_select_own"
+on public.stripe_subscriptions
+for select
+to authenticated
+using ((select auth.uid()) = user_id); --[1]
+
+revoke insert, update, delete on public.stripe_subscriptions from anon, authenticated;
+
+
+-- 3) Eventos Stripe (idempotência de webhook)
+create table if not exists public.stripe_events (
+  id text primary key,          -- evt_...
+  type text not null,
+  created_at timestamptz not null default now(),
+  processed_at timestamptz,
+  payload jsonb
+);
+
+create index if not exists stripe_events_type_idx
+  on public.stripe_events (type);
+
+alter table public.stripe_events enable row level security;
+
+-- Por padrão ninguém do client deve acessar isso
+revoke select, insert, update, delete on public.stripe_events from anon, authenticated;
+
+
+-- 4) VIEW: acesso do usuário (pra UI / checagem rápida)
+-- Regra simples: assinatura ativa ou trial e não expirada
+create or replace view public.user_access as
+select
+  s.user_id,
+  s.status,
+  s.current_period_end,
+  (s.status in ('active','trialing') and (s.current_period_end is null or s.current_period_end > now())) as is_active
+from public.stripe_subscriptions s;
+
+-- View também precisa de RLS via tabela base (stripe_subscriptions)[1]

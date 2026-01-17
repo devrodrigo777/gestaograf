@@ -5,6 +5,7 @@ import { useStore } from '@/store/useStore';
 import { is } from 'date-fns/locale';
 import { subscribe } from 'diagnostics_channel';
 import logoImg from '@/assets/logo.png';
+import { startStripeCheckout } from '@/services/stripeService';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -26,6 +27,11 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   // Acessar usuário Supabase do store
   const { supabaseUser } = useStore();
   
+  // if (!session) {
+  //   console.log("sessão inválida.");
+  //   //return <Navigate to="/login" replace />;
+  // }
+
   // Estados para controlar verificação de autenticação
   const [isLoading, setIsLoading] = useState(true); // Verificando sessão?
   const [isAuthenticated, setIsAuthenticated] = useState(false); // Está logado?
@@ -41,7 +47,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
         const { data: { session } } = await supabase.auth.getSession();
 
         if(session?.user) {
-
+          
           // Autenticado se houver sessão e usuário
           setIsAuthenticated(!!session?.user);
 
@@ -59,6 +65,12 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
             setIsAuthorized(false);
           }
 
+        } else {
+          setIsAuthenticated(false);
+          setIsAuthorized(false);
+
+          // Deslogar se não houver sessão
+          logout();
         }
       } catch (error) {
         console.error('Erro ao verificar autenticação:', error);
@@ -115,7 +127,13 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
           />
           <h1 className="text-2xl font-bold text-red-600 mb-4 mt-4">Acesso negado</h1>
           <p className="text-lg text-red-600 mb-4">Seu e-mail não está autorizado a utilizar o sistema (ainda).</p>
-          <p className="text-lg text-red-600 mb-4"><a href="https://api.whatsapp.com/send?phone=5571935009519&text=Olá,%20Gostaria%20de%20saber%20mais%20sobre%20o%20sistema%20de%20gestão%20gráficas." target="_blank" className="text-primary underline hover:text-primary/90">Clique aqui para falar com o administrador pelo Whatsapp.</a></p>
+          <button 
+            onClick={async () => await startStripeCheckout("price_1Sqeuu1j1yZi8xwBMnuy5SBj")}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+          >
+            Assine Agora!
+          </button>
+          {/* <p className="text-lg text-red-600 mb-4"><a href="https://api.whatsapp.com/send?phone=5571935009519&text=Olá,%20Gostaria%20de%20saber%20mais%20sobre%20o%20sistema%20de%20gestão%20gráficas." target="_blank" className="text-primary underline hover:text-primary/90">ou Fale Comigo no Whatsapp!</a></p> */}
           <p className="text-lg text-red-600 mb-4">Feito com ❤️ por Rodrigo Lopes - <a href="https://www.linkedin.com/in/rodrigolca/" className="text-primary underline hover:text-primary/90">Linkedin</a></p>
           <p className="text-lg text-red-600 mb-4">
             { /* Logout pra voltar pra pagina de login */ }
