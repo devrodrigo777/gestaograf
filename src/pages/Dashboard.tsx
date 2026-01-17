@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { DashboardChart } from '@/components/dashboard/DashboardChart';
@@ -6,10 +7,21 @@ import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval } from 'd
 import { ptBR } from 'date-fns/locale';
 
 export default function Dashboard() {
-  const { getClients, getSales, getQuotes } = useStore();
-  const clients = getClients();
+  const { getClients, getSales, getQuotes, loadClients, loadSales, loadQuotes, user } = useStore();
+  const [isLoading, setIsLoading] = useState(false);
+  const clients = useStore((state) => state.clients);
   const sales = getSales();
   const quotes = getQuotes();
+
+  // Carregar clientes, vendas e orçamentos ao montar o componente
+    useEffect(() => {
+      if (user?.id) {
+        setIsLoading(true);
+        Promise.all([loadClients(), loadSales(), loadQuotes()]).finally(() => {
+          setIsLoading(false);
+      });
+      }
+    }, [user?.id, loadClients, loadSales, loadQuotes]);
 
   const stats = (() => {
     const now = new Date();
@@ -69,6 +81,19 @@ export default function Dashboard() {
     }
     return months;
   })();
+
+  // Enquanto verifica autenticação, mostrar loading screen
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          {/* Spinner animado */}
+          <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="mt-2 text-gray-600">Carregando informações...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">

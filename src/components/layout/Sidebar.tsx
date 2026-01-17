@@ -50,7 +50,10 @@ const menuItems = [
  * - Botão de logout
  * - Toggle para colapsar/expandir
  */
-export function Sidebar() {
+type SidebarProps = {
+  onClose?: () => void;
+};
+export function Sidebar({ onClose }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
   const { user, company } = useStore();
@@ -73,7 +76,7 @@ export function Sidebar() {
     logout();
     
     // Redirecionar para página de login
-
+    onClose?.();
     navigate('/login');
   };
 
@@ -108,6 +111,7 @@ export function Sidebar() {
           <NavLink
             key={item.path}
             to={item.path}
+            onClick={() => onClose?.()}
             className={({ isActive }) =>
               cn(
                 'flex items-center gap-3 px-4 py-3 mx-2 rounded-lg transition-colors',
