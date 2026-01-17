@@ -1,22 +1,163 @@
-# Welcome to your Lovable project
+# 🖨️ Gestão Graf - Sistema de Gestão para Gráficas
 
-## Project info
+Uma aplicação web moderna e completa para gerenciar o dia a dia de uma gráfica. Controle de clientes, produtos, serviços, orçamentos, vendas, produções e acompanhamento em tempo real.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+![React](https://img.shields.io/badge/React-18.3-blue?logo=react)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?logo=typescript)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-3.4-blue?logo=tailwindcss)
+![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-blue?logo=supabase)
 
-## How can I edit this code?
+## 🎯 Funcionalidades Principais
 
-There are several ways of editing your application.
+### 👥 **Gestão de Clientes**
+- Cadastro completo de clientes com email, telefone e dados de CPF/CNPJ
+- Integração com banco de dados Supabase
+- Listagem, edição e exclusão rápida
 
-**Use Lovable**
+### 📦 **Gestão de Produtos**
+- Catalogação de produtos com preço, categoria e unidade de medida
+- Múltiplas unidades de medida (unidade, m², metro linear)
+- Sincronização em tempo real
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+### 🔧 **Gestão de Serviços**
+- Serviços específicos com preço e descrição
+- Ideal para serviços customizados da gráfica
 
-Changes made via Lovable will be committed automatically to this repo.
+### 📋 **Orçamentos (Quotes)**
+- Criação de orçamentos com múltiplos itens
+- Status de produção visual com timeline
+- Acompanhamento: Aguardando Aprovação → Entregue
 
-**Use your preferred IDE**
+### 💰 **Vendas**
+- Conversão de orçamentos em vendas
+- Gestão de pagamentos (Dinheiro, Cartão, PIX, Boleto)
+- Histórico de transações
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### 📊 **Dashboard**
+- Visão geral de atividades recentes
+- Estatísticas com gráficos interativos
+- Cards informativos
+
+### 🚚 **Acompanhamento de Pedidos**
+- Link público para clientes
+- Timeline visual do processo
+- Informações de pagamento
+
+## 🚀 Como Começar
+
+### Pré-requisitos
+- Node.js 18+
+- npm ou yarn
+- Conta Supabase
+
+### Instalação
+
+1. **Clone e instale**
+```bash
+git clone <seu-repositorio>
+cd gestaograf
+npm install
+```
+
+2. **Configure o Supabase**
+
+Crie `.env.local`:
+```env
+VITE_SUPABASE_URL=sua_url_supabase
+VITE_SUPABASE_ANON_KEY=sua_chave_anonima
+```
+
+3. **Execute o SQL de setup**
+
+No editor SQL do Supabase, execute `SUPABASE_STARTSETUP.sql` para criar as tabelas.
+
+4. **Inicie o desenvolvimento**
+```bash
+npm run dev
+```
+
+## 🏗️ Tecnologias
+
+| Layer | Tecnologia |
+|-------|-----------|
+| **Frontend** | React 18.3, TypeScript, Tailwind CSS |
+| **UI Components** | Shadcn/UI, Radix UI |
+| **State** | Zustand |
+| **Forms** | React Hook Form |
+| **Routing** | React Router v6 |
+| **Charts** | Recharts |
+| **Backend** | Supabase (PostgreSQL) |
+| **Auth** | OAuth Google + JWT |
+| **Build** | Vite |
+
+## 📚 Estrutura
+
+```
+src/
+├── components/     # Componentes React
+├── pages/          # Páginas (router)
+├── services/       # CRUD Supabase
+├── store/          # Zustand state
+├── hooks/          # Custom hooks
+├── lib/            # Utilitários
+├── types/          # TypeScript types
+└── assets/         # Imagens e assets
+```
+
+## 📋 Funcionalidades por Página
+
+| Página | Descrição |
+|--------|-----------|
+| **Dashboard** | Visão geral e atividades |
+| **Clientes** | CRUD de clientes |
+| **Produtos** | Catálogo e preços |
+| **Serviços** | Serviços customizados |
+| **Orçamentos** | Criação e acompanhamento |
+| **Vendas** | Vendas e pagamentos |
+| **Atividades** | Feed de atividades recentes |
+| **Relatórios** | Análise de dados |
+| **Status** | Status de pedidos em produção |
+| **TrackOrder** | Link público para clientes |
+| **Configurações** | Preferências da aplicação |
+
+## 🔐 Segurança
+
+- ✅ OAuth Google via Supabase
+- ✅ Row Level Security (RLS)
+- ✅ TypeScript type safety
+- ✅ Validação com Zod
+- ✅ Variáveis de ambiente protegidas
+
+## 📦 Build e Deploy
+
+```bash
+# Build para produção
+npm run build
+
+# Preview local
+npm run preview
+```
+
+Deploy no Vercel:
+```bash
+npm install -g vercel
+vercel
+```
+
+## 🧪 Testes
+
+```bash
+npm run test           # Uma vez
+npm run test:watch    # Em tempo real
+```
+
+## 📧 Suporte
+
+Dúvidas? Abra uma issue no repositório!
+
+---
+
+**Desenvolvido com ❤️ para gráficas modernas**
 
 The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
 
@@ -62,12 +203,8 @@ This project is built with:
 
 ## How can I deploy this project?
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+Visit [Vercel](https://vercel.com) and click on "New Project" to deploy.
 
-## Can I connect a custom domain to my Lovable project?
+## Can I connect a custom domain?
 
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Yes! After deployment, go to your provider's settings and point your domain to the deployment URL.
