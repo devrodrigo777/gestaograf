@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { Quote, ProductionStatus } from '@/types';
 import { PageHeader } from '@/components/ui/page-header';
@@ -37,17 +37,34 @@ const productionStatusLabels: Record<ProductionStatus, string> = {
 };
 
 export default function Quotes() {
-  const { quotes: allQuotes, clients: allClients, company, addQuote, updateQuote, deleteQuote, convertQuoteToSale } = useStore();
+  const {
+    addQuote,
+    updateQuote,
+    deleteQuote,
+    loadQuotes,
+    loadClients,
+    loadProducts,
+    loadServices,
+    addPaymentToQuote,
+    removePaymentFromQuote,
+    convertQuoteToSale,
+    company,
+  } = useStore();
+
+  const allQuotes = useStore((state) => state.quotes);
+  
+  const clients = useStore((state) => state.clients);
+
+  // Filtrar orçamentos localmente
   const quotes = allQuotes.filter(q => q.companyId === company?.id && q.status !== 'converted');
-  const clients = allClients.filter(c => c.companyId === company?.id);
+  const paidQuotes = quotes.filter(q => q.status === 'fully_paid' || q.status === 'partially_paid');
+  const unpaidQuotes = quotes.filter(q => q.status !== 'fully_paid' && q.status !== 'partially_paid');
+  
+  
+  // const clients = allClients.filter(c => c.companyId === company?.id);
 
-  const paidQuotes = quotes.filter(
-    (q) => (q.status === 'fully_paid' || q.status === 'partially_paid')
-  );
 
-  const unpaidQuotes = quotes.filter(
-    (q) => q.status !== 'fully_paid' && q.status !== 'partially_paid'
-  );
+  
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isStatusOpen, setIsStatusOpen] = useState(false);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
@@ -58,6 +75,8 @@ export default function Quotes() {
   const [paymentMethod, setPaymentMethod] = useState<string>('pix');
   const [paymentAmount, setPaymentAmount] = useState<string>('');
   const [newProductionStatus, setNewProductionStatus] = useState<ProductionStatus>('waiting_approval');
+
+  const [isLoading, setIsLoading] = useState(false);
 
   const statusLabels = {
     pending: 'Pendente',
@@ -86,6 +105,27 @@ export default function Quotes() {
     fully_paid: 'text-green-700',
   };
 
+  // Carregar orçamentos ao iniciar o componente
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      try {
+        await Promise.all([
+          loadQuotes(),
+          loadClients(),
+          loadProducts(),
+          loadServices(),
+        ]);
+      } catch (error) {
+        console.error('Erro ao carregar dados:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadData();
+  }, [loadQuotes, loadClients, loadProducts, loadServices]);
+
   const handleNew = () => {
     setEditingQuote(null);
     setIsFormOpen(true);
@@ -96,16 +136,25 @@ export default function Quotes() {
     setIsFormOpen(true);
   };
 
-  const handleDelete = (quote: Quote) => {
+  const handleDelete = async (quote: Quote) => {
     if (confirm('Tem certeza que deseja excluir este orçamento?')) {
-      deleteQuote(quote.id);
-      toast.success('Orçamento excluído com sucesso!');
+      setIsLoading(true);
+      try {
+        await deleteQuote(quote.id);
+        toast.success('Orçamento excluído com sucesso!');
+        await loadQuotes();
+      } catch (error) {
+        console.error('Erro ao excluir orçamento:', error);
+        toast.error('Erro ao excluir orçamento');
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
-  const handleSaveQuote = (data: any) => {
+  const handleSaveQuote = async (data: any) => {
     const { clientId, items, validDays, notes, deliveryDate } = data;
-    
+
     if (!clientId) {
       toast.error('Selecione um cliente');
       return;
@@ -116,56 +165,68 @@ export default function Quotes() {
       return;
     }
 
-    const client = clients.find((c) => c.id === clientId);
+    const client = clients.find(c => c.id === clientId);
     if (!client) {
       toast.error('Cliente não encontrado');
       return;
     }
-    
+
     const total = items.reduce((acc: number, item: any) => acc + item.total, 0);
     const validity = parseInt(validDays) || 30;
 
-    if (editingQuote) {
-      // Update existing quote
-      const updatedQuote: Partial<Quote> = {
-        clientId,
-        clientName: client.name,
-        clientPhone: client.phone,
-        items,
-        total,
-        validUntil: addDays(new Date(editingQuote.createdAt), validity).toISOString(),
-        notes,
-        deliveryDate,
-      };
-      updateQuote(editingQuote.id, updatedQuote);
-      toast.success('Orçamento atualizado com sucesso!');
-    } else {
-      const newQuote: Quote = {
-        id: crypto.randomUUID(),
-        companyId: company!.id,
-        clientId: clientId,
-        clientName: client.name,
-        clientPhone: client.phone,
-        items: items,
-        total,
-        payments: [],
-        status: 'pending',
-        productionStatus: 'waiting_approval',
-        validUntil: addDays(new Date(), validity).toISOString(),
-        createdAt: new Date().toISOString(),
-        notes: notes,
-        deliveryDate,
-      };
-      addQuote(newQuote);
-      toast.success('Orçamento criado com sucesso!');
-    }
+    setIsLoading(true);
+    try {
+      if (editingQuote) {
+        // Atualizar orçamento existente
+        await updateQuote(editingQuote.id, {
+          clientId,
+          clientName: client.name,
+          clientPhone: client.phone,
+          items,
+          total,
+          validUntil: new Date(Date.now() + validity * 24 * 60 * 60 * 1000).toISOString(),
+          notes,
+          deliveryDate,
+        });
+        toast.success('Orçamento atualizado com sucesso!');
+      } else {
+        // Criar novo orçamento
+        const newQuote: Quote = {
+          id: crypto.randomUUID(),
+          companyId: company!.id,
+          clientId: clientId,
+          clientName: client.name,
+          clientPhone: client.phone,
+          items: items,
+          total,
+          payments: [],
+          status: 'pending',
+          productionStatus: 'waiting_approval',
+          validUntil: new Date(Date.now() + validity * 24 * 60 * 60 * 1000).toISOString(),
+          createdAt: new Date().toISOString(),
+          notes: notes,
+          deliveryDate,
+        };
+        await addQuote(newQuote);
+        toast.success('Orçamento criado com sucesso!');
+      }
 
-    setIsFormOpen(false);
-    setEditingQuote(null);
+      setIsFormOpen(false);
+      setEditingQuote(null);
+      await loadQuotes();
+    } catch (error) {
+      console.error('Erro ao salvar orçamento:', error);
+      toast.error('Erro ao salvar orçamento');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-
-  const columns = [
+  const columns: Array<{
+      key: keyof Quote | 'actions' | 'difference';
+      header: string;
+      render?: (item: Quote) => React.ReactNode;
+    }> = [
     { key: 'id' as const, header: 'Nº', render: (item: Quote) => item.id.slice(0, 8).toUpperCase() },
     { key: 'clientName' as const, header: 'Cliente' },
     {
@@ -212,7 +273,7 @@ export default function Quotes() {
       render: (item: Quote) => format(new Date(item.createdAt), 'dd/MM/yyyy'),
     },
     {
-      key: 'productionStatus' as const,
+      key: 'difference' as const,
       header: 'Diferença',
       render: (item: Quote) => {
         const paidAmount = (item.payments || []).reduce((acc, p) => acc + p.amount, 0);
@@ -342,17 +403,36 @@ Gráfica Express - Qualidade em impressão!`;
     setIsStatusOpen(true);
   };
 
-  const handleUpdateProductionStatus = () => {
+  const handleUpdateProductionStatus = async () => {
     if (!selectedQuote) return;
-    updateQuote(selectedQuote.id, { productionStatus: newProductionStatus });
-    toast.success('Status de produção atualizado!');
-    setIsStatusOpen(false);
+
+    setIsLoading(true);
+    try {
+      await updateQuote(selectedQuote.id, { productionStatus: newProductionStatus });
+      toast.success('Status de produção atualizado!');
+      setIsStatusOpen(false);
+      await loadQuotes();
+    } catch (error) {
+      console.error('Erro ao atualizar status:', error);
+      toast.error('Erro ao atualizar status');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleConvert = (quote: Quote) => {
+  const handleConvert = async (quote: Quote) => {
     if (confirm('Tem certeza que deseja converter este orçamento em venda?')) {
-      convertQuoteToSale(quote.id, 'pix');
-      toast.success('Orçamento convertido em venda!');
+      setIsLoading(true);
+      try {
+        await convertQuoteToSale(quote.id, 'pix');
+        toast.success('Orçamento convertido em venda!');
+        await loadQuotes();
+      } catch (error) {
+        console.error('Erro ao converter:', error);
+        toast.error('Erro ao converter orçamento');
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -363,43 +443,56 @@ Gráfica Express - Qualidade em impressão!`;
     setIsPaymentOpen(true);
   };
 
-  const handleAddPayment = () => {
+  const handleAddPayment = async () => {
     if (!selectedQuote || !paymentAmount) {
       toast.error('Preencha o valor do pagamento');
       return;
     }
 
-    // Converter formato brasileiro para número
-    const amount = parseFloat(paymentAmount.replace(/\./g, '').replace(/,/g, '.'));
-    
+    const amount = parseFloat(paymentAmount.replace(/\./g, '').replace(',', '.'));
     if (amount <= 0) {
       toast.error('O valor do pagamento deve ser maior que zero');
       return;
     }
 
-    const paidAmount = (selectedQuote.payments || []).reduce((acc, p) => acc + p.amount, 0);
+    const paidAmount = selectedQuote.payments.reduce((acc, p) => acc + p.amount, 0);
     const newTotalPaid = paidAmount + amount;
 
-    const { addPaymentToQuote } = useStore.getState();
-    addPaymentToQuote(selectedQuote.id, amount, paymentMethod);
-    
-    // Atualizar status baseado no total pago
-    if (newTotalPaid >= selectedQuote.total) {
-      updateQuote(selectedQuote.id, { status: 'fully_paid' });
-    } else {
-      updateQuote(selectedQuote.id, { status: 'partially_paid' });
+    setIsLoading(true);
+    try {
+      await addPaymentToQuote(selectedQuote.id, amount, paymentMethod);
+
+      // Atualizar status baseado no total pago
+      if (newTotalPaid >= selectedQuote.total) {
+        await updateQuote(selectedQuote.id, { status: 'fully_paid' });
+      } else {
+        await updateQuote(selectedQuote.id, { status: 'partially_paid' });
+      }
+
+      toast.success('Pagamento registrado com sucesso!');
+      setIsPaymentOpen(false);
+      await loadQuotes();
+    } catch (error) {
+      console.error('Erro ao registrar pagamento:', error);
+      toast.error('Erro ao registrar pagamento');
+    } finally {
+      setIsLoading(false);
     }
-    
-    toast.success('Pagamento registrado com sucesso!');
-    
-    setIsPaymentOpen(false);
   };
 
-  const handleRemovePayment = (quoteId: string, paymentId: string) => {
+  const handleRemovePayment = async (quoteId: string, paymentId: string) => {
     if (confirm('Tem certeza que deseja remover este pagamento?')) {
-      const { removePaymentFromQuote } = useStore.getState();
-      removePaymentFromQuote(quoteId, paymentId);
-      toast.success('Pagamento removido com sucesso!');
+      setIsLoading(true);
+      try {
+        await removePaymentFromQuote(quoteId, paymentId);
+        toast.success('Pagamento removido com sucesso!');
+        await loadQuotes();
+      } catch (error) {
+        console.error('Erro ao remover pagamento:', error);
+        toast.error('Erro ao remover pagamento');
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 

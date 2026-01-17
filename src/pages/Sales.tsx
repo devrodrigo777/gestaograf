@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { Sale, SaleItem, ProductionStatus } from '@/types';
 import { PageHeader } from '@/components/ui/page-header';
@@ -11,6 +11,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -35,13 +36,47 @@ const productionStatusLabels: Record<ProductionStatus, string> = {
   delivered: 'Entregue',
 };
 
+const paymentMethodLabels: Record<string, string> = {
+  pix: 'PIX',
+  cash: 'Dinheiro',
+  credit: 'Cartão de Crédito',
+  debit: 'Cartão de Débito',
+  boleto: 'Boleto',
+};
+
 export default function Sales() {
-  const { getSales, getClients, getProducts, getServices, addSale, updateSale, deleteSale, company, getQuotes } = useStore();
-  const sales = getSales();
-  const quotes = getQuotes();
-  const clients = getClients();
-  const products = getProducts();
-  const services = getServices();
+  const {
+    deleteSale,
+    updateSale,
+    loadSales,
+    company,
+  } = useStore();
+
+  // Carregar vendas ao iniciar o componente
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      try {
+        await loadSales();
+      } catch (error) {
+        console.error('Erro ao carregar vendas:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadData();
+  }, [loadSales]);
+
+  // ✅ Seletores reativos
+  const allSales = useStore((state) => state.sales);
+
+  const sales = allSales.filter(s => s.companyId === company?.id);
+
+  const [isStatusOpen, setIsStatusOpen] = useState(false);
+  const [newProductionStatus, setNewProductionStatus] = useState<ProductionStatus>('approved');
+  const [isLoading, setIsLoading] = useState(false);
+
   const [isOpen, setIsOpen] = useState(false);
   const [formData, setFormData] = useState({
     clientId: '',
@@ -78,12 +113,14 @@ export default function Sales() {
   };
 
   const columns = [
-    { key: 'id' as const, header: 'Nº', render: (item: Sale) => item.id.slice(0, 8).toUpperCase() },
-    { key: 'clientName' as const, header: 'Cliente' },
-    {
-      key: 'paymentMethod' as const,
-      header: 'Pagamento',
-      render: (item: Sale) => paymentLabels[item.paymentMethod],
+    { 
+      key: 'id' as const, 
+      header: 'Nº', 
+      render: (item: Sale) => item.id.slice(0, 8).toUpperCase() 
+    },
+    { 
+      key: 'clientName' as const, 
+      header: 'Cliente' 
     },
     {
       key: 'total' as const,
@@ -92,70 +129,69 @@ export default function Sales() {
         `R$ ${item.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
     },
     {
-      key: 'status' as const,
-      header: 'Diferença',
-      render: (item: Sale) => {
-        if (!item.quoteId) return <div className="text-sm text-muted-foreground">-</div>;
-        
-        const quote = quotes.find(q => q.id === item.quoteId);
-        if (!quote) return <div className="text-sm text-muted-foreground">-</div>;
-        
-        const totalPaid = (quote.payments || []).reduce((acc, p) => acc + p.amount, 0);
-        const difference = totalPaid - quote.total;
-        
-        if (difference > 0) {
-          return (
-            <div className="text-sm text-blue-600 font-medium">
-              +R$ {difference.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </div>
-          );
-        }
-        return <div className="text-sm text-muted-foreground">-</div>;
-      },
+      key: 'paymentMethod' as const,
+      header: 'Pagamento',
+      render: (item: Sale) => (
+        <span className="text-sm">
+          {paymentMethodLabels[item.paymentMethod] || item.paymentMethod}
+        </span>
+      ),
     },
     {
-      key: 'paymentMethod' as const,
-      header: 'Status',
-      render: (item: Sale) => (
-        <div className="flex flex-col gap-1">
-          <span className={cn('text-white px-3 py-1 rounded text-xs font-medium', statusColors[item.status])}>
-            {statusLabels[item.status]}
+      key: 'productionStatus' as const,
+      header: 'Status Produção',
+      render: (item: Sale) => {
+        const statusColors: Record<ProductionStatus, string> = {
+          waiting_approval: 'bg-yellow-100 text-yellow-800',
+          approved: 'bg-blue-100 text-blue-800',
+          in_production: 'bg-purple-100 text-purple-800',
+          finishing: 'bg-orange-100 text-orange-800',
+          ready: 'bg-green-100 text-green-800',
+          delivered: 'bg-gray-100 text-gray-800',
+        };
+
+        return (
+          <span className={cn('px-3 py-1 rounded text-xs font-medium', statusColors[item.productionStatus])}>
+            {productionStatusLabels[item.productionStatus] || 'Aprovado'}
           </span>
-          {item.productionStatus && (
-            <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded">
-              {productionStatusLabels[item.productionStatus]}
-            </span>
-          )}
-        </div>
-      ),
+        );
+      },
     },
     {
       key: 'createdAt' as const,
       header: 'Data',
-      render: (item: Sale) => format(new Date(item.createdAt), 'dd/MM/yyyy'),
+      render: (item: Sale) => {
+        if (!item.createdAt) return '-';
+        try {
+          return format(new Date(item.createdAt), 'dd/MM/yyyy HH:mm');
+        } catch {
+          return '-';
+        }
+      },
+    },
+    {
+      key: 'deliveryDate' as const,
+      header: 'Entrega',
+      render: (item: Sale) => {
+        if (!item.deliveryDate) return '-';
+        try {
+          return format(new Date(item.deliveryDate), 'dd/MM/yyyy');
+        } catch {
+          return '-';
+        }
+      },
     },
     {
       key: 'actions' as const,
       header: 'Ações',
       render: (item: Sale) => (
-        <div className="flex gap-2">
+        <div className="flex gap-1">
           <Button
             variant="outline"
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
-              handleSendWhatsApp(item);
-            }}
-            title="Enviar via WhatsApp"
-          >
-            <Send className="w-4 h-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              window.open(`/acompanhar/${item.quoteId || item.id}`, '_blank');
+              window.open(`/acompanhar/${item.id}`, '_blank');
             }}
             title="Ver página de acompanhamento"
           >
@@ -166,7 +202,7 @@ export default function Sales() {
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
-              handleOpenProductionStatus(item);
+              handleOpenStatusDialog(item);
             }}
             title="Atualizar status de produção"
           >
@@ -271,10 +307,19 @@ export default function Sales() {
     toast.success('Venda marcada como paga!');
   };
 
-  const handleDelete = (sale: Sale) => {
+  const handleDelete = async (sale: Sale) => {
     if (confirm('Tem certeza que deseja excluir esta venda?')) {
-      deleteSale(sale.id);
-      toast.success('Venda excluída com sucesso!');
+      setIsLoading(true);
+      try {
+        await deleteSale(sale.id);
+        toast.success('Venda excluída com sucesso!');
+        await loadSales();
+      } catch (error) {
+        console.error('Erro ao excluir venda:', error);
+        toast.error('Erro ao excluir venda');
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -302,10 +347,27 @@ Gráfica Express - Qualidade em impressão!`;
     toast.success('Abrindo WhatsApp...');
   };
 
-  const handleOpenProductionStatus = (sale: Sale) => {
+  const handleOpenStatusDialog = (sale: Sale) => {
     setSelectedSale(sale);
-    setProductionStatus(sale.productionStatus || 'waiting_approval');
-    setStatusDialogOpen(true);
+    setNewProductionStatus(sale.productionStatus || 'approved');
+    setIsStatusOpen(true);
+  };
+
+  const handleUpdateProductionStatus = async () => {
+    if (!selectedSale) return;
+
+    setIsLoading(true);
+    try {
+      await updateSale(selectedSale.id, { productionStatus: newProductionStatus });
+      toast.success('Status de produção atualizado!');
+      setIsStatusOpen(false);
+      await loadSales();
+    } catch (error) {
+      console.error('Erro ao atualizar status:', error);
+      toast.error('Erro ao atualizar status');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSaveProductionStatus = () => {
@@ -322,204 +384,76 @@ Gráfica Express - Qualidade em impressão!`;
     <div className="p-6">
       <PageHeader
         title="Vendas"
-        description="Gerencie suas vendas"
-        action={{ label: 'Nova Venda', onClick: handleOpen }}
+        description="Gerencie suas vendas realizadas"
       />
+
+      <div className="mb-4 p-4 bg-card rounded-lg border">
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <p className="text-sm text-muted-foreground">Total de Vendas</p>
+            <p className="text-2xl font-bold">{sales.length}</p>
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">Faturamento Total</p>
+            <p className="text-2xl font-bold">
+              R$ {sales.reduce((acc, s) => acc + s.total, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">Ticket Médio</p>
+            <p className="text-2xl font-bold">
+              R$ {sales.length > 0 
+                ? (sales.reduce((acc, s) => acc + s.total, 0) / sales.length).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
+                : '0,00'}
+            </p>
+          </div>
+        </div>
+      </div>
 
       <DataTable
         data={sales}
         columns={columns}
-        onEdit={(sale) => sale.status === 'pending' && handleMarkAsPaid(sale)}
         onDelete={handleDelete}
       />
 
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Nova Venda</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Cliente *</Label>
-                <Select
-                  value={formData.clientId}
-                  onValueChange={(value) => setFormData({ ...formData, clientId: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um cliente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clients.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Forma de Pagamento</Label>
-                <Select
-                  value={formData.paymentMethod}
-                  onValueChange={(value) => setFormData({ ...formData, paymentMethod: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pix">PIX</SelectItem>
-                    <SelectItem value="cash">Dinheiro</SelectItem>
-                    <SelectItem value="credit">Cartão de Crédito</SelectItem>
-                    <SelectItem value="debit">Cartão de Débito</SelectItem>
-                    <SelectItem value="boleto">Boleto</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Add Item */}
-            <div className="border border-border rounded-lg p-4">
-              <Label className="mb-3 block">Adicionar Item</Label>
-              <div className="grid grid-cols-4 gap-2">
-                <Select
-                  value={newItem.type}
-                  onValueChange={(value) => setNewItem({ ...newItem, type: value, itemId: '' })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="product">Produto</SelectItem>
-                    <SelectItem value="service">Serviço</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={newItem.itemId}
-                  onValueChange={(value) => setNewItem({ ...newItem, itemId: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {newItem.type === 'product'
-                      ? products.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name} - R$ {p.price.toFixed(2)}
-                          </SelectItem>
-                        ))
-                      : services.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.name} - R$ {s.price.toFixed(2)}
-                          </SelectItem>
-                        ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  type="number"
-                  min="1"
-                  value={newItem.quantity}
-                  onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })}
-                  placeholder="Qtd"
-                />
-                <Button type="button" onClick={handleAddItem}>
-                  <Plus className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-
-            {/* Items List */}
-            {formData.items.length > 0 && (
-              <div className="border border-border rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted">
-                    <tr>
-                      <th className="text-left p-3">Item</th>
-                      <th className="text-right p-3">Qtd</th>
-                      <th className="text-right p-3">Unit.</th>
-                      <th className="text-right p-3">Total</th>
-                      <th className="w-10"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {formData.items.map((item) => (
-                      <tr key={item.id} className="border-t border-border">
-                        <td className="p-3">{item.name}</td>
-                        <td className="text-right p-3">{item.quantity}</td>
-                        <td className="text-right p-3">R$ {item.unitPrice.toFixed(2)}</td>
-                        <td className="text-right p-3">R$ {item.total.toFixed(2)}</td>
-                        <td className="p-3">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveItem(item.id)}
-                          >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                    <tr className="border-t border-border bg-muted font-semibold">
-                      <td colSpan={3} className="p-3 text-right">
-                        Total:
-                      </td>
-                      <td className="text-right p-3">
-                        R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            <div className="flex gap-2 justify-end pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit">Registrar Venda</Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
-        <DialogContent>
+      {/* Update Production Status Dialog */}
+      <Dialog open={isStatusOpen} onOpenChange={setIsStatusOpen}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Atualizar Status de Produção</DialogTitle>
+            <DialogDescription>
+              Selecione o novo status de produção para a venda.
+            </DialogDescription>
           </DialogHeader>
-          {selectedSale && (
-            <div className="space-y-4">
-              <div>
-                <p className="text-sm text-muted-foreground mb-2">Venda #{selectedSale.id.slice(0, 8).toUpperCase()}</p>
-              </div>
-              <div>
-                <Label>Status de Produção</Label>
-                <Select value={productionStatus} onValueChange={(value) => setProductionStatus(value as ProductionStatus)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="waiting_approval">Aguardando Aprovação</SelectItem>
-                    <SelectItem value="approved">Aprovado</SelectItem>
-                    <SelectItem value="in_production">Em Produção</SelectItem>
-                    <SelectItem value="finishing">Acabamento</SelectItem>
-                    <SelectItem value="ready">Pronto para Retirada</SelectItem>
-                    <SelectItem value="delivered">Entregue</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex gap-2 justify-end pt-4">
-                <Button variant="outline" onClick={() => setStatusDialogOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button onClick={handleSaveProductionStatus}>
-                  Salvar
-                </Button>
-              </div>
+          <div className="space-y-4">
+            <p className="text-muted-foreground">
+              Venda <strong>#{selectedSale?.id.slice(0, 8).toUpperCase()}</strong> - {selectedSale?.clientName}
+            </p>
+            <div>
+              <Label>Status de Produção</Label>
+              <Select value={newProductionStatus} onValueChange={(v) => setNewProductionStatus(v as ProductionStatus)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="waiting_approval">Aguardando Aprovação</SelectItem>
+                  <SelectItem value="approved">Aprovado</SelectItem>
+                  <SelectItem value="in_production">Em Produção</SelectItem>
+                  <SelectItem value="finishing">Acabamento</SelectItem>
+                  <SelectItem value="ready">Pronto para Retirada</SelectItem>
+                  <SelectItem value="delivered">Entregue</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          )}
+            <div className="flex gap-2 justify-end pt-4">
+              <Button variant="outline" onClick={() => setIsStatusOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleUpdateProductionStatus}>
+                Atualizar Status
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

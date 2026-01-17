@@ -14,6 +14,26 @@ import {
   updateProductInSupabase,
   deleteProductFromSupabase,
 } from '@/services/productService';
+import {
+  getServicesFromSupabase,
+  createServiceInSupabase,
+  updateServiceInSupabase,
+  deleteServiceFromSupabase,
+} from '@/services/serviceService';
+import {
+  getQuotesFromSupabase,
+  createQuoteInSupabase,
+  updateQuoteInSupabase,
+  deleteQuoteFromSupabase,
+  addPaymentToQuoteInSupabase,
+  removePaymentFromQuoteInSupabase,
+} from '@/services/quoteService';
+import {
+  getSalesFromSupabase,
+  createSaleInSupabase,
+  updateSaleInSupabase,
+  deleteSaleFromSupabase,
+} from '@/services/saleService';
 
 /**
  * Interface Store
@@ -60,6 +80,7 @@ interface Store {
   updateService: (id: string, service: Partial<Service>) => void;
   deleteService: (id: string) => void;
   getServices: () => Service[];
+  loadServices: () => Promise<void>;
   
   // ==================== MÉTODOS DE CLIENTES ====================
   addClient: (client: Client) => Promise<void>;
@@ -69,12 +90,13 @@ interface Store {
   loadClients: () => Promise<void>;
   
   // ==================== MÉTODOS DE ORÇAMENTOS ====================
-  addQuote: (quote: Quote) => void;
-  updateQuote: (id: string, quote: Partial<Quote>) => void;
-  deleteQuote: (id: string) => void;
-  addPaymentToQuote: (quoteId: string, amount: number, method: any) => void;
-  removePaymentFromQuote: (quoteId: string, paymentId: string) => void;
-  convertQuoteToSale: (quoteId: string, paymentMethod: Sale['paymentMethod']) => void;
+  addQuote: (quote: Quote) => Promise<void>;
+  updateQuote: (id: string, quote: Partial<Quote>) => Promise<void>;
+  deleteQuote: (id: string) => Promise<void>;
+  loadQuotes: () => Promise<void>;
+  addPaymentToQuote: (quoteId: string, amount: number, method: any) => Promise<void>;
+  removePaymentFromQuote: (quoteId: string, paymentId: string) => Promise<void>;
+  convertQuoteToSale: (quoteId: string, paymentMethod: Sale['paymentMethod']) => Promise<void>;
   getQuotes: () => Quote[];
   
   // ==================== MÉTODOS DE ATIVIDADES ====================
@@ -82,10 +104,11 @@ interface Store {
   restoreActivity: (id: string) => void; // Restaurar atividade
   
   // ==================== MÉTODOS DE VENDAS ====================
-  addSale: (sale: Sale) => void;
-  updateSale: (id: string, sale: Partial<Sale>) => void;
-  deleteSale: (id: string) => void;
+  addSale: (sale: Sale) => Promise<void>;
+  updateSale: (id: string, sale: Partial<Sale>) => Promise<void>;
+  deleteSale: (id: string) => Promise<void>;
   getSales: () => Sale[];
+  loadSales: () => Promise<void>;
 }
 
 /**
@@ -175,26 +198,58 @@ export const useStore = create<Store>()(
        * Sincronizar usuário Supabase com o store
        * Converte dados do Supabase para o formato local da aplicação
        */
-      setSupabaseUser: (supabaseUser) => {
+      setSupabaseUser: async (supabaseUser) => {
+        try {
         // Extrair informações do usuário Supabase
         const email = supabaseUser.email || '';
         const displayName = supabaseUser.user_metadata?.full_name || 
-                           supabaseUser.user_metadata?.name || 
-                           email.split('@')[0]; // Usar parte do email como fallback
+                          supabaseUser.user_metadata?.name || 
+                          email.split('@')[0];
         
+        // ✅ BUSCAR A EMPRESA DO USUÁRIO NO BANCO
+        const { data: userData, error } = await supabase
+          .from('usuarios_autorizados')
+          .select('id, empresa')
+          .eq('email', email)
+          .single();
+        
+        if (error || !userData) {
+          console.error('❌ Erro ao buscar empresa do usuário:', error);
+          throw new Error('Empresa não encontrada para este usuário');
+        }
+
+        console.log('✅ Empresa encontrada:', userData);
+
         // Criar usuário local baseado no Supabase
         const user: User = {
-          id: supabaseUser.id, // Use ID do Supabase
+          id: supabaseUser.id,
           username: displayName,
           email: email,
-          password: '', // Não usado com Supabase (autenticação é via OAuth)
-          companyId: '1', // Usar companyId padrão
+          password: '',
+          companyId: userData.id, // ✅ Usar o ID real da tabela usuarios_autorizados
           createdAt: new Date().toISOString(),
-          empresa: supabaseUser.user_metadata?.empresa || 'Minha Empresa', // Recuperar coluna empresa
+          empresa: userData.empresa || 'Minha Empresa',
         };
 
-        // Atualizar store com novo usuário
-        set({ supabaseUser, user, company: get().companies[0] || null });
+        // Criar objeto Company
+        const company: Company = {
+          id: userData.id, // ✅ UUID real da empresa
+          name: userData.empresa || 'Minha Empresa',
+          createdAt: new Date().toISOString(),
+        };
+
+        // Salvar no estado
+        set({ 
+          user, 
+          company, // ✅ Salvar company também
+          supabaseUser,
+        });
+
+        console.log('✅ Usuário e empresa salvos:', { user, company });
+      } catch (error) {
+        console.error('❌ Erro ao configurar usuário:', error);
+        throw error;
+      }
       },
 
       /**
@@ -253,17 +308,39 @@ export const useStore = create<Store>()(
       },
 
       // Services
-      addService: (service) => set((state) => ({ services: [...state.services, service] })),
-      updateService: (id, service) => set((state) => ({
-        services: state.services.map((s) => s.id === id ? { ...s, ...service } : s)
-      })),
-      deleteService: (id) => set((state) => ({
-        services: state.services.filter((s) => s.id !== id)
-      })),
+      // addService: (service) => set((state) => ({ services: [...state.services, service] })),
+      addService: async (service) => {
+        const createdService = await createServiceInSupabase(service);
+        if (createdService) {
+          set((state) => ({ services: [...state.services, createdService] }));
+        }
+      },
+
+      updateService: async (id, service) => {
+        const updatedService = await updateServiceInSupabase(id, service);
+        if (updatedService) {
+          set((state) => ({
+            services: state.services.map((s) => s.id === id ? updatedService : s)
+          }));
+        }
+      },
+      deleteService: async (id) => {
+        const success = await deleteServiceFromSupabase(id);
+        if (success) {
+          set((state) => ({
+            services: state.services.filter((s) => s.id !== id)
+          }));
+        }
+      },
       getServices: () => {
         const state = get();
         if (!state.company) return [];
         return state.services.filter(s => s.companyId === state.company!.id);
+      },
+
+      loadServices: async () => {
+        const services = await getServicesFromSupabase();
+        set({ services });
       },
 
       // Clients
@@ -300,128 +377,135 @@ export const useStore = create<Store>()(
       },
 
       // Quotes
-      addQuote: (quote) => set((state) => ({ quotes: [...state.quotes, quote] })),
-      // Update a quote and propagate productionStatus to related sales when changed
-      updateQuote: (id, quote) => set((state) => {
-        const updatedQuotes = state.quotes.map((q) => q.id === id ? { ...q, ...quote } : q);
-        const updatedQuote = updatedQuotes.find(q => q.id === id);
-        let updatedSales = state.sales;
-        if (updatedQuote && quote.productionStatus !== undefined) {
-          updatedSales = state.sales.map(s => s.quoteId === id ? { ...s, productionStatus: updatedQuote.productionStatus } : s);
-        }
-        return {
-          ...state,
-          quotes: updatedQuotes,
-          sales: updatedSales,
-        };
-      }),
-      deleteQuote: (id) => set((state) => ({
-        quotes: state.quotes.filter((q) => q.id !== id)
-      })),
-      addPaymentToQuote: (quoteId, amount, method) => set((state) => ({
-        quotes: state.quotes.map((q) => {
-          if (q.id === quoteId) {
-            const newPayment = {
-              id: crypto.randomUUID(),
-              amount,
-              method,
-              createdAt: new Date().toISOString(),
-            };
-            return {
-              ...q,
-              payments: [...(q.payments || []), newPayment],
-            };
-          }
-          return q;
-        }),
-      })),
-      removePaymentFromQuote: (quoteId, paymentId) => set((state) => ({
-        quotes: state.quotes.map((q) => {
-          if (q.id === quoteId) {
-            return {
-              ...q,
-              payments: (q.payments || []).filter((p) => p.id !== paymentId),
-            };
-          }
-          return q;
-        }),
-      })),
-      convertQuoteToSale: (quoteId, paymentMethod) => {
-        const state = get();
-        const quote = state.quotes.find(q => q.id === quoteId);
-        if (!quote) return;
+    addQuote: async (quote) => {
+      const createdQuote = await createQuoteInSupabase(quote);
+      if (createdQuote) {
+        set((state) => ({ quotes: [...state.quotes, createdQuote] }));
+      }
+    },
 
-        // Converter status do orçamento para status da venda
-        let saleStatus: Sale['status'] = 'pending';
-        if (quote.status === 'fully_paid') {
-          saleStatus = 'paid';
-        } else if (quote.status === 'pending') {
-          saleStatus = 'pending';
-        } else if (quote.status === 'partially_paid') {
-          saleStatus = 'pending';
-        }
-
-        const sale: Sale = {
-          id: crypto.randomUUID(),
-          companyId: quote.companyId,
-          clientId: quote.clientId,
-          clientName: quote.clientName,
-          quoteId: quote.id,
-          items: quote.items.map(item => ({
-            id: crypto.randomUUID(),
-            productId: item.productId,
-            serviceId: item.serviceId,
-            name: item.name,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            total: item.total,
-          })),
-          total: quote.total,
-          paymentMethod,
-          status: saleStatus,
-          productionStatus: quote.productionStatus,
-          deliveryDate: quote.deliveryDate,
-          createdAt: new Date().toISOString(),
-        };
-
+    updateQuote: async (id, quote) => {
+      const updatedQuote = await updateQuoteInSupabase(id, quote);
+      if (updatedQuote) {
         set((state) => ({
-          quotes: state.quotes.map(q => q.id === quoteId ? { ...q, status: 'converted' as const } : q),
-          sales: [...state.sales, sale],
+          quotes: state.quotes.map((q) => (q.id === id ? updatedQuote : q)),
         }));
-      },
-      getQuotes: () => {
-        const state = get();
-        if (!state.company) return [];
-        return state.quotes.filter(q => q.companyId === state.company!.id);
-      },
+      }
+    },
+
+    deleteQuote: async (id) => {
+      const success = await deleteQuoteFromSupabase(id);
+      if (success) {
+        set((state) => ({
+          quotes: state.quotes.filter((q) => q.id !== id),
+        }));
+      }
+    },
+
+    getQuotes: () => {
+      const state = get();
+      if (!state.company) return [];
+      return state.quotes.filter((q) => q.companyId === state.company!.id);
+    },
+
+    // 
+    loadQuotes: async () => {
+      const quotes = await getQuotesFromSupabase();
+      set({ quotes });
+    },
+
+    addPaymentToQuote: async (quoteId, amount, method) => {
+      const success = await addPaymentToQuoteInSupabase(quoteId, amount, method);
+      if (success) {
+        // Recarregar orçamentos para atualizar os pagamentos
+        const quotes = await getQuotesFromSupabase();
+        set({ quotes });
+      }
+    },
+
+    removePaymentFromQuote: async (quoteId, paymentId) => {
+      const success = await removePaymentFromQuoteInSupabase(paymentId);
+      if (success) {
+        // Recarregar orçamentos para atualizar os pagamentos
+        const quotes = await getQuotesFromSupabase();
+        set({ quotes });
+      }
+    },
+
+    convertQuoteToSale: async (quoteId, paymentMethod) => {
+      // Buscar o orçamento
+      const state = get();
+      const quote = state.quotes.find(q => q.id === quoteId);
+      if (!quote) return;
+
+      // Criar venda baseada no orçamento
+      const sale = {
+        id: crypto.randomUUID(),
+        companyId: quote.companyId,
+        clientId: quote.clientId,
+        clientName: quote.clientName,
+        clientPhone: quote.clientPhone,
+        items: quote.items,
+        total: quote.total,
+        paymentMethod,
+        status: 'paid' as const,
+        productionStatus: quote.productionStatus,
+        createdAt: new Date().toISOString(),
+        deliveryDate: quote.deliveryDate,
+        quoteId: quote.id,
+      };
+
+      // Adicionar venda
+      const createdSale = await createSaleInSupabase(sale);
+      if (createdSale) {
+        set((state) => ({ sales: [...state.sales, createdSale] }));
+        
+        // Atualizar status do orçamento para convertido
+        await updateQuoteInSupabase(quoteId, { status: 'converted' });
+        
+        // Recarregar orçamentos
+        const quotes = await getQuotesFromSupabase();
+        set({ quotes });
+      }
+    },
 
       // Sales
-      addSale: (sale) => set((state) => ({ sales: [...state.sales, sale] })),
-      // Update a sale and, if it references a quote, propagate productionStatus back to the quote
-      updateSale: (id, sale) => set((state) => {
-        const updatedSales = state.sales.map((s) => s.id === id ? { ...s, ...sale } : s);
-        const updatedSale = updatedSales.find(s => s.id === id);
-        let updatedQuotes = state.quotes;
-        if (updatedSale && updatedSale.quoteId && sale.productionStatus !== undefined) {
-          updatedQuotes = state.quotes.map(q => q.id === updatedSale.quoteId ? { ...q, productionStatus: updatedSale.productionStatus } : q);
+      addSale: async (sale) => {
+        const createdSale = await createSaleInSupabase(sale);
+        if (createdSale) {
+          set((state) => ({ sales: [...state.sales, createdSale] }));
         }
-        return {
-          ...state,
-          sales: updatedSales,
-          quotes: updatedQuotes,
-        };
-      }),
+      },
+
+      updateSale: async (id, sale) => {
+        const updatedSale = await updateSaleInSupabase(id, sale);
+        if (updatedSale) {
+          set((state) => ({
+            sales: state.sales.map((s) => (s.id === id ? updatedSale : s)),
+          }));
+        }
+      },
 
       // Activities dismissal
       dismissActivity: (id) => set((state) => ({ dismissedActivityIds: Array.from(new Set([...state.dismissedActivityIds, id])) })),
       restoreActivity: (id) => set((state) => ({ dismissedActivityIds: state.dismissedActivityIds.filter(i => i !== id) })),
-      deleteSale: (id) => set((state) => ({
-        sales: state.sales.filter((s) => s.id !== id)
-      })),
+      deleteSale: async (id) => {
+        const success = await deleteSaleFromSupabase(id);
+        if (success) {
+          set((state) => ({
+            sales: state.sales.filter((s) => s.id !== id),
+          }));
+        }
+      },
       getSales: () => {
         const state = get();
         if (!state.company) return [];
-        return state.sales.filter(s => s.companyId === state.company!.id);
+        return state.sales.filter((s) => s.companyId === state.company!.id);
+      },
+
+      loadSales: async () => {
+        const sales = await getSalesFromSupabase();
+        set({ sales });
       },
     }),
     {

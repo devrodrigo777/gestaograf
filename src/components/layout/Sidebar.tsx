@@ -37,8 +37,8 @@ const menuItems = [
   { icon: FileText, label: 'Orçamentos', path: '/orcamentos' },
   { icon: DollarSign, label: 'Vendas', path: '/vendas' },
   { icon: BarChart3, label: 'Relatórios', path: '/relatorios' },
-  { icon: Activity, label: 'Status', path: '/status' },
-  { icon: Settings, label: 'Configurações', path: '/configuracoes' },
+  // { icon: Activity, label: 'Status', path: '/status' },
+  // { icon: Settings, label: 'Configurações', path: '/configuracoes' },
 ];
 
 /**

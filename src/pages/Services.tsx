@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { Service } from '@/types';
 import { PageHeader } from '@/components/ui/page-header';
@@ -18,9 +18,10 @@ import { format } from 'date-fns';
 import { formatCurrency, parseCurrency } from '@/lib/formatters';
 
 export default function Services() {
-  const { getServices, addService, updateService, deleteService, company } = useStore();
-  const services = getServices();
+  const { getServices, addService, updateService, deleteService, loadServices, company } = useStore();
+  const services = useStore((state) => state.services);
   const [isOpen, setIsOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -28,6 +29,11 @@ export default function Services() {
     price: '',
     duration: '',
   });
+
+  useEffect(() => {
+    setIsLoading(true);
+    loadServices().finally(() => setIsLoading(false));
+  }, [loadServices]);
 
   const columns = [
     { key: 'name' as const, header: 'Nome' },
@@ -42,9 +48,73 @@ export default function Services() {
     {
       key: 'createdAt' as const,
       header: 'Cadastrado em',
-      render: (item: Service) => format(new Date(item.createdAt), 'dd/MM/yyyy'),
+      render: (item: Service) => {
+        // ✅ Validar se a data existe e é válida
+        if (!item.createdAt) return '-';
+        
+        try {
+          return format(new Date(item.createdAt), 'dd/MM/yyyy');
+        } catch (error) {
+          console.error('Erro ao formatar data:', item.createdAt, error);
+          return '-';
+        }
+      },
     },
   ];
+
+  const handleSubmit = async(e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!formData.name || !formData.price) {
+      toast.error('Preencha os campos obrigatórios');
+      return;
+    }
+
+    const price = parseCurrency(formData.price);
+    if (isNaN(price)) {
+      toast.error('Preço inválido');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      if (editingService) {
+        await updateService(editingService.id, {
+          name: formData.name,
+          description: formData.description,
+          price,
+        });
+        toast.success('Serviço atualizado com sucesso!');
+      } else {
+        const newService: Service = {
+          id: crypto.randomUUID(),
+          companyId: '', // Será preenchido pelo service
+          name: formData.name,
+          description: formData.description,
+          price,
+          createdAt: new Date().toISOString(),
+        };
+        await addService(newService);
+        toast.success('Serviço cadastrado com sucesso!');
+      }
+
+      setIsOpen(false);
+      setIsLoading(true);
+      await loadServices().finally(() => setIsLoading(false));
+    } catch (error) {
+      console.error('Erro ao salvar serviço:', error);
+      toast.error('Erro ao salvar serviço');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDelete = (service: Service) => {
+    if (confirm('Tem certeza que deseja excluir este serviço?')) {
+      deleteService(service.id);
+      toast.success('Serviço excluído com sucesso!');
+    }
+  };
 
   const handleOpen = (service?: Service) => {
     if (service) {
@@ -67,50 +137,7 @@ export default function Services() {
     setFormData({ ...formData, price: formatCurrency(rawValue) });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!formData.name || !formData.price) {
-      toast.error('Preencha os campos obrigatórios');
-      return;
-    }
-
-    const price = parseCurrency(formData.price);
-    if (isNaN(price)) {
-      toast.error('Preço inválido');
-      return;
-    }
-
-    const serviceData = {
-      name: formData.name,
-      description: formData.description,
-      price,
-      duration: formData.duration,
-    };
-
-    if (editingService) {
-      updateService(editingService.id, serviceData);
-      toast.success('Serviço atualizado com sucesso!');
-    } else {
-      const newService: Service = {
-        id: crypto.randomUUID(),
-        companyId: company!.id,
-        ...serviceData,
-        createdAt: new Date().toISOString(),
-      };
-      addService(newService);
-      toast.success('Serviço cadastrado com sucesso!');
-    }
-
-    setIsOpen(false);
-  };
-
-  const handleDelete = (service: Service) => {
-    if (confirm('Tem certeza que deseja excluir este serviço?')) {
-      deleteService(service.id);
-      toast.success('Serviço excluído com sucesso!');
-    }
-  };
+  
 
   return (
     <div className="p-6">

@@ -44,11 +44,11 @@ export default function Login() {
 
     // Escutar mudanças de autenticação em tempo real
     // Isso detecta login/logout de qualquer aba do navegador
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
         // Sincronizar usuário com o store Zustand
-        setSupabaseUser(session.user);
+        await setSupabaseUser(session.user);
       }
     });
 

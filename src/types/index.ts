@@ -109,6 +109,8 @@ export interface SaleItem {
   quantity: number;
   unitPrice: number;
   total: number;
+  width?: number;
+  height?: number;
 }
 
 export interface Sale {
@@ -116,6 +118,7 @@ export interface Sale {
   companyId: string;
   clientId: string;
   clientName: string;
+  clientPhone?: string;
   quoteId?: string;
   items: SaleItem[];
   total: number;

@@ -29,18 +29,21 @@ function getStatusIndex(status: ProductionStatus): number {
 
 export default function TrackOrder() {
   const { id } = useParams<{ id: string }>();
-  const { quotes } = useStore();
+  const { quotes, sales } = useStore();
   
+  // Buscar em quotes ou sales
   const quote = quotes.find(q => q.id === id);
-  
-  if (!quote) {
+  const sale = sales.find(s => s.id === id);
+  const order = quote || sale;
+
+  if (!order) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="text-center">
           <FileText className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-foreground mb-2">Orçamento não encontrado</h1>
+          <h1 className="text-2xl font-bold text-foreground mb-2">Pedido não encontrado</h1>
           <p className="text-muted-foreground mb-6">
-            O link pode estar incorreto ou o orçamento foi removido.
+            O link pode estar incorreto ou o pedido foi removido.
           </p>
           <Link 
             to="/" 
@@ -54,7 +57,7 @@ export default function TrackOrder() {
     );
   }
 
-  const currentStatusIndex = getStatusIndex(quote.productionStatus);
+  const currentStatusIndex = getStatusIndex(order.productionStatus);
 
   return (
     <div className="min-h-screen bg-background">
@@ -76,24 +79,24 @@ export default function TrackOrder() {
         <div className="bg-card rounded-lg border border-border p-6 mb-8 animate-fade-in">
           <div className="flex flex-wrap gap-4 justify-between items-start mb-4">
             <div>
-              <p className="text-sm text-muted-foreground">Orçamento Nº</p>
-              <p className="text-lg font-bold text-foreground">{quote.id.slice(0, 8).toUpperCase()}</p>
+              <p className="text-sm text-muted-foreground">{quote ? 'Orçamento' : 'Venda'} Nº</p>
+              <p className="text-lg font-bold text-foreground">{order.id.slice(0, 8).toUpperCase()}</p>
             </div>
             <div className="text-right">
               <p className="text-sm text-muted-foreground">Cliente</p>
-              <p className="font-medium text-foreground">{quote.clientName}</p>
+              <p className="font-medium text-foreground">{order.clientName}</p>
             </div>
           </div>
           
           <div className="flex flex-wrap gap-4 justify-between items-start">
             <div>
-              <p className="text-sm text-muted-foreground">Data do Orçamento</p>
-              <p className="text-foreground">{format(new Date(quote.createdAt), 'dd/MM/yyyy')}</p>
+              <p className="text-sm text-muted-foreground">Data do {quote ? 'Orçamento' : 'Pedido'}</p>
+              <p className="text-foreground">{format(new Date(order.createdAt), 'dd/MM/yyyy')}</p>
             </div>
             <div className="text-right">
               <p className="text-sm text-muted-foreground">Valor Total</p>
               <p className="text-xl font-bold text-primary">
-                R$ {quote.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                R$ {order.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </p>
             </div>
           </div>
@@ -156,10 +159,10 @@ export default function TrackOrder() {
 
         {/* Items */}
         <div className="bg-card rounded-lg border border-border p-6 animate-fade-in">
-          <h2 className="text-lg font-semibold text-foreground mb-4">Itens do Orçamento</h2>
+          <h2 className="text-lg font-semibold text-foreground mb-4">Itens do {quote ? 'Orçamento' : 'Pedido'}</h2>
           
           <div className="divide-y divide-border">
-            {quote.items.map((item) => (
+            {order.items.map((item) => (
               <div key={item.id} className="py-3 flex justify-between">
                 <div>
                   <p className="font-medium text-foreground">{item.name}</p>
@@ -177,18 +180,18 @@ export default function TrackOrder() {
           <div className="border-t border-border mt-4 pt-4 flex justify-between">
             <p className="font-semibold text-foreground">Total</p>
             <p className="font-bold text-lg text-primary">
-              R$ {quote.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              R$ {order.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </p>
           </div>
         </div>
 
         {/* Payments */}
-        {quote.payments && quote.payments.length > 0 && (
+        {order.payments && order.payments.length > 0 && (
           <div className="bg-card rounded-lg border border-border p-6 mt-8 animate-fade-in">
             <h2 className="text-lg font-semibold text-foreground mb-4">Pagamentos Registrados</h2>
             
             <div className="space-y-3 mb-6">
-              {quote.payments.map((payment) => (
+              {order.payments.map((payment) => (
                 <div key={payment.id} className="flex justify-between items-start p-3 bg-muted rounded-lg">
                   <div>
                     <p className="font-medium text-foreground">
@@ -213,18 +216,18 @@ export default function TrackOrder() {
               <div className="flex justify-between">
                 <p className="text-muted-foreground">Já Pago:</p>
                 <p className="font-semibold text-green-600">
-                  R$ {quote.payments.reduce((acc, p) => acc + p.amount, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  R$ {order.payments.reduce((acc, p) => acc + p.amount, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </p>
               </div>
               <div className="flex justify-between">
                 <p className="text-muted-foreground">Faltando:</p>
                 <p className="font-semibold text-orange-600">
-                  R$ {Math.max(0, quote.total - quote.payments.reduce((acc, p) => acc + p.amount, 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  R$ {Math.max(0, order.total - order.payments.reduce((acc, p) => acc + p.amount, 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </p>
               </div>
               {(() => {
-                const totalPaid = quote.payments.reduce((acc, p) => acc + p.amount, 0);
-                const difference = totalPaid - quote.total;
+                const totalPaid = order.payments.reduce((acc, p) => acc + p.amount, 0);
+                const difference = totalPaid - order.total;
                 if (difference > 0) {
                   return (
                     <div className="flex justify-between pt-2 border-t border-border">
@@ -240,10 +243,10 @@ export default function TrackOrder() {
             </div>
           </div>
         )}
-        {quote.notes && (
+        {order.notes && (
           <div className="bg-card rounded-lg border border-border p-6 mt-8 animate-fade-in">
             <h2 className="text-lg font-semibold text-foreground mb-2">Observações</h2>
-            <p className="text-muted-foreground">{quote.notes}</p>
+            <p className="text-muted-foreground">{order.notes}</p>
           </div>
         )}
 

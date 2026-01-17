@@ -137,3 +137,186 @@ using (
     where email = auth.jwt() ->> 'email'
   )
 );
+
+
+Ótimo! Vamos implementar os orçamentos. Essa é mais complexa porque envolve itens de orçamento e pagamentos. Vamos fazer passo a passo!
+​
+
+Passo 1: Estrutura das tabelas no Supabase
+Primeiro, crie as tabelas necessárias:
+
+sql
+-- 1. Tabela de orçamentos
+CREATE TABLE orcamentos (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  empresa_id UUID NOT NULL REFERENCES usuarios_autorizados(id) ON DELETE CASCADE,
+  cliente_id UUID NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+  cliente_nome TEXT NOT NULL,
+  cliente_telefone TEXT NOT NULL,
+  total NUMERIC(10, 2) NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  status_producao TEXT NOT NULL DEFAULT 'waiting_approval',
+  valido_ate TIMESTAMP WITH TIME ZONE NOT NULL,
+  data_entrega TIMESTAMP WITH TIME ZONE,
+  observacoes TEXT,
+  criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 2. Tabela de itens do orçamento
+CREATE TABLE orcamentos_itens (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  orcamento_id UUID NOT NULL REFERENCES orcamentos(id) ON DELETE CASCADE,
+  produto_id UUID REFERENCES produtos(id) ON DELETE SET NULL,
+  servico_id UUID REFERENCES servicos(id) ON DELETE SET NULL,
+  nome TEXT NOT NULL,
+  quantidade NUMERIC(10, 2) NOT NULL,
+  largura NUMERIC(10, 2),
+  altura NUMERIC(10, 2),
+  preco_unitario NUMERIC(10, 2) NOT NULL,
+  total NUMERIC(10, 2) NOT NULL,
+  criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 3. Tabela de pagamentos
+CREATE TABLE orcamentos_pagamentos (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  orcamento_id UUID NOT NULL REFERENCES orcamentos(id) ON DELETE CASCADE,
+  valor NUMERIC(10, 2) NOT NULL,
+  metodo TEXT NOT NULL,
+  criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 4. Habilitar RLS nas três tabelas
+ALTER TABLE orcamentos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE orcamentos_itens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE orcamentos_pagamentos ENABLE ROW LEVEL SECURITY;
+
+-- 5. Políticas para ORCAMENTOS
+CREATE POLICY "Usuários podem ver orçamentos da própria empresa"
+  ON orcamentos FOR SELECT
+  USING (
+    empresa_id IN (
+      SELECT id FROM usuarios_autorizados 
+      WHERE email = auth.jwt() ->> 'email'
+    )
+  );
+
+CREATE POLICY "Usuários podem criar orçamentos para própria empresa"
+  ON orcamentos FOR INSERT
+  WITH CHECK (
+    empresa_id IN (
+      SELECT id FROM usuarios_autorizados 
+      WHERE email = auth.jwt() ->> 'email'
+    )
+  );
+
+CREATE POLICY "Usuários podem atualizar orçamentos da própria empresa"
+  ON orcamentos FOR UPDATE
+  USING (
+    empresa_id IN (
+      SELECT id FROM usuarios_autorizados 
+      WHERE email = auth.jwt() ->> 'email'
+    )
+  );
+
+CREATE POLICY "Usuários podem deletar orçamentos da própria empresa"
+  ON orcamentos FOR DELETE
+  USING (
+    empresa_id IN (
+      SELECT id FROM usuarios_autorizados 
+      WHERE email = auth.jwt() ->> 'email'
+    )
+  );
+
+-- 6. Políticas para ITENS (herdam permissão do orçamento pai)
+CREATE POLICY "Usuários podem ver itens dos próprios orçamentos"
+  ON orcamentos_itens FOR SELECT
+  USING (
+    orcamento_id IN (
+      SELECT id FROM orcamentos 
+      WHERE empresa_id IN (
+        SELECT id FROM usuarios_autorizados 
+        WHERE email = auth.jwt() ->> 'email'
+      )
+    )
+  );
+
+CREATE POLICY "Usuários podem criar itens nos próprios orçamentos"
+  ON orcamentos_itens FOR INSERT
+  WITH CHECK (
+    orcamento_id IN (
+      SELECT id FROM orcamentos 
+      WHERE empresa_id IN (
+        SELECT id FROM usuarios_autorizados 
+        WHERE email = auth.jwt() ->> 'email'
+      )
+    )
+  );
+
+CREATE POLICY "Usuários podem atualizar itens dos próprios orçamentos"
+  ON orcamentos_itens FOR UPDATE
+  USING (
+    orcamento_id IN (
+      SELECT id FROM orcamentos 
+      WHERE empresa_id IN (
+        SELECT id FROM usuarios_autorizados 
+        WHERE email = auth.jwt() ->> 'email'
+      )
+    )
+  );
+
+CREATE POLICY "Usuários podem deletar itens dos próprios orçamentos"
+  ON orcamentos_itens FOR DELETE
+  USING (
+    orcamento_id IN (
+      SELECT id FROM orcamentos 
+      WHERE empresa_id IN (
+        SELECT id FROM usuarios_autorizados 
+        WHERE email = auth.jwt() ->> 'email'
+      )
+    )
+  );
+
+-- 7. Políticas para PAGAMENTOS (herdam permissão do orçamento pai)
+CREATE POLICY "Usuários podem ver pagamentos dos próprios orçamentos"
+  ON orcamentos_pagamentos FOR SELECT
+  USING (
+    orcamento_id IN (
+      SELECT id FROM orcamentos 
+      WHERE empresa_id IN (
+        SELECT id FROM usuarios_autorizados 
+        WHERE email = auth.jwt() ->> 'email'
+      )
+    )
+  );
+
+CREATE POLICY "Usuários podem criar pagamentos nos próprios orçamentos"
+  ON orcamentos_pagamentos FOR INSERT
+  WITH CHECK (
+    orcamento_id IN (
+      SELECT id FROM orcamentos 
+      WHERE empresa_id IN (
+        SELECT id FROM usuarios_autorizados 
+        WHERE email = auth.jwt() ->> 'email'
+      )
+    )
+  );
+
+CREATE POLICY "Usuários podem deletar pagamentos dos próprios orçamentos"
+  ON orcamentos_pagamentos FOR DELETE
+  USING (
+    orcamento_id IN (
+      SELECT id FROM orcamentos 
+      WHERE empresa_id IN (
+        SELECT id FROM usuarios_autorizados 
+        WHERE email = auth.jwt() ->> 'email'
+      )
+    )
+  );
+
+-- 8. Índices para performance
+CREATE INDEX idx_orcamentos_empresa_id ON orcamentos(empresa_id);
+CREATE INDEX idx_orcamentos_cliente_id ON orcamentos(cliente_id);
+CREATE INDEX idx_orcamentos_criado_em ON orcamentos(criado_em DESC);
+CREATE INDEX idx_orcamentos_itens_orcamento_id ON orcamentos_itens(orcamento_id);
+CREATE INDEX idx_orcamentos_pagamentos_orcamento_id ON orcamentos_pagamentos(orcamento_id);
