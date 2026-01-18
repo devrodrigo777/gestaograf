@@ -77,7 +77,7 @@ export default function Login() {
       provider: 'google', // Usar Google como provedor
       options: {
         // Redirecionar para home após autenticação bem-sucedida
-        redirectTo: window.location.origin + '/',
+        redirectTo: window.location.origin + '/dashboard',
       }
     });
 

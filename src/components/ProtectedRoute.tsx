@@ -135,7 +135,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
             alt="GestãoGraf Logo" 
             className="h-20 w-auto mx-auto" // Ajuste o tamanho aqui
           />
-          <h1 className="text-2xl font-bold text-orange-400 mb-4 mt-4">Acesso negado</h1>
+          <h1 className="text-2xl font-bold text-orange-400 mb-4 mt-4">Seja bem-vindo(a)!</h1>
           <p className="text-lg text-orange-400">Seu e-mail <strong>ainda</strong> não está autorizado a utilizar o sistema.</p>
           <p className="text-lg text-orange-400 mb-4">Para continuar, pedimos que confirme sua assinatura.</p>
           <div className="my-8 text-left max-w-md mx-auto">
