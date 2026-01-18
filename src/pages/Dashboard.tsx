@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useStore } from '@/store/useStore';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { DashboardChart } from '@/components/dashboard/DashboardChart';
@@ -9,9 +11,26 @@ import { ptBR } from 'date-fns/locale';
 export default function Dashboard() {
   const { getClients, getSales, getQuotes, loadClients, loadSales, loadQuotes, user } = useStore();
   const [isLoading, setIsLoading] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
   const clients = useStore((state) => state.clients);
   const sales = getSales();
   const quotes = getQuotes();
+
+  // Efeito para verificar o status do pagamento via URL
+  useEffect(() => {
+    const paymentSuccess = searchParams.get('payment_success');
+    if (paymentSuccess === 'true') {
+      toast.success('Assinatura paga com sucesso!');
+      // Limpar o parâmetro da URL para não exibir o toast novamente
+      searchParams.delete('payment_success');
+      setSearchParams(searchParams, { replace: true });
+    } else if (paymentSuccess === 'false') {
+      toast.error('Ocorreu um erro ao processar o pagamento.');
+      // Limpar o parâmetro da URL para não exibir o toast novamente
+      searchParams.delete('payment_success');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   // Carregar clientes, vendas e orçamentos ao montar o componente
     useEffect(() => {

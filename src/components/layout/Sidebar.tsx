@@ -7,6 +7,7 @@ import {
   FileText,
   DollarSign,
   BarChart3,
+  CreditCard,
   ChevronLeft,
   Menu,
   LogOut,
@@ -29,7 +30,7 @@ import { supabase } from '@/lib/supabaseClient';
  * - blinking: (opcional) Mostra ponto piscante indicando atividade
  */
 const menuItems = [
-  { icon: Home, label: 'Home', path: '/' },
+  { icon: Home, label: 'Home', path: '/dashboard' },
   { icon: Users, label: 'Clientes', path: '/clientes' },
   { icon: Package, label: 'Produtos', path: '/produtos' },
   { icon: Wrench, label: 'Serviços', path: '/servicos' },
@@ -37,8 +38,9 @@ const menuItems = [
   { icon: FileText, label: 'Orçamentos', path: '/orcamentos' },
   { icon: DollarSign, label: 'Vendas', path: '/vendas' },
   { icon: BarChart3, label: 'Relatórios', path: '/relatorios' },
+  { icon: CreditCard, label: 'Assinatura', path: '/assinatura' },
   // { icon: Activity, label: 'Status', path: '/status' },
-  // { icon: Settings, label: 'Configurações', path: '/configuracoes' },
+  { icon: Settings, label: 'Configurações', path: '/configuracoes' },
 ];
 
 /**
@@ -101,6 +103,8 @@ export function Sidebar({ onClose }: SidebarProps) {
         <div className="text-center py-3 border-b border-white/10">
           <h2 className="text-sidebar-header font-semibold text-sm">{user?.empresa || company?.name || 'Sua Empresa'}</h2>
           <p className="text-sidebar-text text-xs">{user?.username || 'Usuário'}</p>
+          <p className="text-sidebar-text text-xs">{user?.email || 'E-mail'}</p>
+          <p className="text-sidebar-text text-xs"><strong>Plano Atual:</strong> <i>Essencial</i></p>
         </div>
       )}
 

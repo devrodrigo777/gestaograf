@@ -61,7 +61,7 @@ export default function Login() {
   useEffect(() => {
     if (user) {
       console.log("Usuário detectado, redirecionando...", user);
-      navigate('/');
+      navigate('/dashboard');
     }
   }, [user, navigate]);
 

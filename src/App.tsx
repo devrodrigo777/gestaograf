@@ -18,6 +18,8 @@ import NotFound from "./pages/NotFound";
 import Settings from "./pages/Settings";
 import Activities from "./pages/Activities";
 import Status from "./pages/Status";
+import Subscription from "./pages/Subscription";
+import LandingPage from "./pages/LandingPage";
 import { useEffect } from "react";
 import { useStore } from "@/store/useStore";
 import { supabase } from "@/lib/supabaseClient";
@@ -79,6 +81,9 @@ const App = () => {
         
         <BrowserRouter>
           <Routes>
+            {/* Rota de Landing Page - Pública */}
+            <Route path="/" element={<LandingPage />} />
+
             {/* Rota de Login - Pública, sem layout */}
             <Route path="/login" element={<Login />} />
             
@@ -92,7 +97,7 @@ const App = () => {
                 <Layout>
                   <Routes>
                     {/* Dashboard - Home da aplicação */}
-                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/dashboard" element={<Dashboard />} />
                     
                     {/* Gerenciamento de Dados */}
                     <Route path="/clientes" element={<Clients />} />
@@ -110,6 +115,7 @@ const App = () => {
                     {/* Configurações */}
                     <Route path="/status" element={<Status />} />
                     <Route path="/configuracoes" element={<Settings />} />
+                    <Route path="/assinatura" element={<Subscription />} />
                     
                     {/* Página padrão para rotas não encontradas */}
                     <Route path="*" element={<NotFound />} />

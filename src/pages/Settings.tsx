@@ -5,29 +5,47 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabaseClient';
 
 export default function Settings() {
   const { user, updateUser } = useStore();
-  const [displayName, setDisplayName] = useState(user?.username || '');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [empresaNome, setEmpresaNome] = useState(user?.empresa || '');
+  const [loading, setLoading] = useState(false);
 
-  const handleSave = () => {
-    if (password !== confirmPassword) {
-      toast.error('As senhas não conferem');
+  const handleSave = async () => {
+    if (!user || !empresaNome.trim()) {
+      toast.error('Nome da empresa não pode estar vazio');
       return;
     }
 
-    const updatedUser: Partial<User> = {
-      username: displayName,
-    };
+    console.log("Tentando atualizar o ID:", user?.companyId);
+    setLoading(true);
+    try {
+      
+      const { data: userData, error: userError } = await supabase
+      .from('usuarios_autorizados')
+      .update({ empresa: empresaNome })
+      .eq('id', user.companyId) // Verifique se o ID está correto aqui
+      .select() 
+      .single();
 
-    if (password) {
-      updatedUser.password = password;
+    if (userError) {
+      throw userError; // Lança o erro para ser pego no catch
     }
 
-    updateUser(updatedUser);
-    toast.success('Configurações salvas com sucesso!');
+    if (!userData) {
+      toast.error('Registro não encontrado no banco');
+      return;
+    }
+
+    await updateUser({ ...user, empresa: userData.empresa });
+    toast.success('Nome da empresa atualizado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao atualizar empresa:', error);
+      toast.error('Erro ao salvar configurações');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -38,32 +56,17 @@ export default function Settings() {
       />
       <div className="max-w-md space-y-6">
         <div>
-          <Label htmlFor="displayName">Nome de Exibição</Label>
+          <Label htmlFor="empresaNome">Nome da Empresa</Label>
           <Input
-            id="displayName"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
+            id="empresaNome"
+            value={empresaNome}
+            onChange={(e) => setEmpresaNome(e.target.value)}
+            placeholder="Digite o nome da sua empresa"
           />
         </div>
-        <div>
-          <Label htmlFor="password">Nova Senha</Label>
-          <Input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
-        <div>
-          <Label htmlFor="confirmPassword">Confirmar Nova Senha</Label>
-          <Input
-            id="confirmPassword"
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-          />
-        </div>
-        <Button onClick={handleSave}>Salvar Alterações</Button>
+        <Button onClick={handleSave} disabled={loading}>
+          {loading ? 'Salvando...' : 'Salvar Alterações'}
+        </Button>
       </div>
     </div>
   );

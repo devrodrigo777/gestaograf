@@ -29,12 +29,13 @@ function getStatusIndex(status: ProductionStatus): number {
 
 export default function TrackOrder() {
   const { id } = useParams<{ id: string }>();
-  const { quotes, sales } = useStore();
+  const { quotes, sales, user } = useStore();
   
   // Buscar em quotes ou sales
   const quote = quotes.find(q => q.id === id);
   const sale = sales.find(s => s.id === id);
   const order = quote || sale;
+  const userName = user?.empresa;
 
   if (!order) {
     return (
@@ -46,7 +47,7 @@ export default function TrackOrder() {
             O link pode estar incorreto ou o pedido foi removido.
           </p>
           <Link 
-            to="/" 
+            to="/dashboard" 
             className="inline-flex items-center gap-2 text-primary hover:underline"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -68,7 +69,7 @@ export default function TrackOrder() {
             <div className="w-10 h-10 rounded-full bg-sidebar-header flex items-center justify-center">
               <span className="text-xl">🖨️</span>
             </div>
-            <h1 className="text-xl font-semibold">Gráfica Express</h1>
+            <h1 className="text-xl font-semibold">{userName}</h1>
           </div>
           <p className="text-sidebar-text text-sm">Acompanhamento de Pedido</p>
         </div>
@@ -252,8 +253,8 @@ export default function TrackOrder() {
 
         {/* Footer */}
         <div className="text-center mt-8 text-sm text-muted-foreground">
-          <p>Gráfica Express - Sistema de Gestão</p>
-          <p>Dúvidas? Entre em contato conosco!</p>
+          <p>GestãoGraf - Sistema de Gestão</p>
+          <p>Sistema construído com ❤️ por <a href="https://linkedin.com/in/RodrigoLCA" target="_blank" rel="noopener noreferrer" className="hover:underline">@RodrigoLCA</a>.</p>
         </div>
       </main>
     </div>
