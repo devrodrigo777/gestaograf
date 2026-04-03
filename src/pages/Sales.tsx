@@ -134,15 +134,6 @@ export default function Sales() {
         `R$ ${item.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
     },
     {
-      key: 'paymentMethod' as const,
-      header: 'Pagamento',
-      render: (item: Sale) => (
-        <span className="text-sm">
-          {paymentMethodLabels[item.paymentMethod] || item.paymentMethod}
-        </span>
-      ),
-    },
-    {
       key: 'productionStatus' as const,
       header: 'Status Produção',
       render: (item: Sale) => {
@@ -515,12 +506,6 @@ Gráfica Express - Qualidade em impressão!`;
                 </p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Método de Pagamento</p>
-                <p className="font-semibold">
-                  {paymentMethodLabels[detailsSale?.paymentMethod || 'pix']}
-                </p>
-              </div>
-              <div>
                 <p className="text-sm text-muted-foreground">Data</p>
                 <p className="font-semibold">
                   {detailsSale && format(new Date(detailsSale.createdAt), 'dd/MM/yyyy HH:mm')}
@@ -556,7 +541,7 @@ Gráfica Express - Qualidade em impressão!`;
                   {payments.map((payment) => (
                     <div key={payment.id} className="flex justify-between text-sm p-2 bg-green-50 border border-green-200 rounded">
                       <div>
-                        <p className="font-medium">{payment.metodo || payment.method || 'N/A'}</p>
+                        <p className="font-medium">{paymentLabels[payment.metodo || payment.method] || 'N/A'}</p>
                         <p className="text-xs text-muted-foreground">
                           {payment.criado_em && format(new Date(payment.criado_em), 'dd/MM/yyyy HH:mm')}
                         </p>
