@@ -22,8 +22,9 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { Plus, Trash2, CheckCircle, Eye, Send, Settings } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, Eye, Send, Settings, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getPaymentsBySaleQuoteId } from '@/services/saleService';
 
 const BASE_URL = window.location.origin;
 
@@ -91,6 +92,10 @@ export default function Sales() {
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [productionStatus, setProductionStatus] = useState('');
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+  const [detailsSaleOpen, setDetailsSaleOpen] = useState(false);
+  const [detailsSale, setDetailsSale] = useState<Sale | null>(null);
+  const [payments, setPayments] = useState<any[]>([]);
+  const [paymentLoading, setPaymentLoading] = useState(false);
 
   const statusLabels = {
     pending: 'Pendente',
@@ -186,6 +191,17 @@ export default function Sales() {
       header: 'Ações',
       render: (item: Sale) => (
         <div className="flex gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenDetailsDialog(item);
+            }}
+            title="Ver detalhes da venda"
+          >
+            <FileText className="w-4 h-4" />
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -353,6 +369,25 @@ Gráfica Express - Qualidade em impressão!`;
     setIsStatusOpen(true);
   };
 
+  const handleOpenDetailsDialog = async (sale: Sale) => {
+    setDetailsSale(sale);
+    setDetailsSaleOpen(true);
+    setPaymentLoading(true);
+    try {
+      if (sale.quoteId) {
+        const paymentsData = await getPaymentsBySaleQuoteId(sale.quoteId);
+        setPayments(paymentsData);
+      } else {
+        setPayments([]);
+      }
+    } catch (error) {
+      console.error('Erro ao buscar pagamentos:', error);
+      toast.error('Erro ao buscar pagamentos');
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
   const handleUpdateProductionStatus = async () => {
     if (!selectedSale) return;
 
@@ -451,6 +486,95 @@ Gráfica Express - Qualidade em impressão!`;
               </Button>
               <Button onClick={handleUpdateProductionStatus}>
                 Atualizar Status
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Sale Details Dialog */}
+      <Dialog open={detailsSaleOpen} onOpenChange={setDetailsSaleOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Detalhes da Venda</DialogTitle>
+            <DialogDescription>
+              Venda #{detailsSale?.id.slice(0, 8).toUpperCase()} - {detailsSale?.clientName}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6">
+            {/* Informações Básicas */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Cliente</p>
+                <p className="font-semibold">{detailsSale?.clientName}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Total</p>
+                <p className="font-semibold">
+                  R$ {detailsSale?.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Método de Pagamento</p>
+                <p className="font-semibold">
+                  {paymentMethodLabels[detailsSale?.paymentMethod || 'pix']}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Data</p>
+                <p className="font-semibold">
+                  {detailsSale && format(new Date(detailsSale.createdAt), 'dd/MM/yyyy HH:mm')}
+                </p>
+              </div>
+            </div>
+
+            {/* Itens da Venda */}
+            <div>
+              <p className="text-sm font-semibold mb-3">Itens</p>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {detailsSale?.items.map((item) => (
+                  <div key={item.id} className="flex justify-between text-sm p-2 bg-muted rounded">
+                    <div>
+                      <p className="font-medium">{item.name}</p>
+                      <p className="text-xs text-muted-foreground">Qtd: {item.quantity}</p>
+                    </div>
+                    <p className="font-semibold">
+                      R$ {item.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Pagamentos */}
+            <div>
+              <p className="text-sm font-semibold mb-3">Pagamentos</p>
+              {paymentLoading ? (
+                <p className="text-sm text-muted-foreground">Carregando pagamentos...</p>
+              ) : payments.length > 0 ? (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {payments.map((payment) => (
+                    <div key={payment.id} className="flex justify-between text-sm p-2 bg-green-50 border border-green-200 rounded">
+                      <div>
+                        <p className="font-medium">{payment.metodo || payment.method || 'N/A'}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {payment.criado_em && format(new Date(payment.criado_em), 'dd/MM/yyyy HH:mm')}
+                        </p>
+                      </div>
+                      <p className="font-semibold text-green-700">
+                        R$ {parseFloat(payment.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Nenhum pagamento registrado</p>
+              )}
+            </div>
+
+            <div className="flex gap-2 justify-end pt-4">
+              <Button variant="outline" onClick={() => setDetailsSaleOpen(false)}>
+                Fechar
               </Button>
             </div>
           </div>

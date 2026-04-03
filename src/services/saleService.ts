@@ -83,6 +83,28 @@ export async function getSalesFromSupabase(): Promise<Sale[]> {
 }
 
 /**
+ * Buscar pagamentos de uma venda pelo quoteId
+ */
+export async function getPaymentsBySaleQuoteId(quoteId: string): Promise<any[]> {
+  try {
+    if (!quoteId) return [];
+
+    const { data: paymentsData, error } = await supabase
+      .from('orcamentos_pagamentos')
+      .select('*')
+      .eq('orcamento_id', quoteId)
+      .order('criado_em', { ascending: false });
+
+    if (error) throw error;
+
+    return paymentsData || [];
+  } catch (error) {
+    console.error('❌ Erro ao buscar pagamentos:', error);
+    return [];
+  }
+}
+
+/**
  * Criar nova venda
  */
 export async function createSaleInSupabase(sale: Sale): Promise<Sale | null> {
